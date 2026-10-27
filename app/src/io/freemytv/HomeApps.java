@@ -26,6 +26,8 @@ import android.media.tv.TvContract;
 import android.media.tv.TvInputInfo;
 import android.media.tv.TvInputManager;
 import android.provider.Settings;
+import android.text.TextPaint;
+import android.text.TextUtils;
 import android.util.DisplayMetrics;
 import android.view.View;
 
@@ -117,9 +119,9 @@ final class HomeApps {
         {"spotify", "Spotify", "com.spotify.tv.android", "1DB954", "", "1"},
     };
     /**
-     * Apps the shelf shows at once (it scrolls for the rest): 8, today's smallest tiles (178 wide in HomeView's 1760 of
-     * content), so a shelf of up to 8 looks as it always did. The built-in list keeps 8, and low-memory TVs hold 8 at
-     * most, without scrolling: every app on the shelf keeps its logo in memory, at two sizes.
+     * Shelf tiles shown at once: 8, including the fixed All Apps tile (178 wide in HomeView's 1760 of content).
+     * The built-in list keeps 8 apps; low-memory TVs hold at most 8 app logos, each at two sizes. The app row scrolls
+     * within the remaining slots without changing the saved app order.
      */
     private static final int SHELF_VISIBLE = 8, FEW_APPS = 8;
 
@@ -165,6 +167,8 @@ final class HomeApps {
 
     private static final Map<String, Bitmap> TILES = new HashMap<>();   // key → ready card
     private static final Map<String, Bitmap> LOGOS = new HashMap<>();   // key → colored logo with no background
+    private static Bitmap shelfAppsTile;
+    private static String shelfAppsLabel;
 
     /**
      * Home screen apps. `extract`: also lifts the logos that are not on disk yet (slow: background only); without it,
@@ -199,7 +203,30 @@ final class HomeApps {
             }
             items.add(it);
         }
+        items.add(shelfApps(c));
         return items;
+    }
+
+    /** Always last, outside the saved app order and the limit on app logos in memory. */
+    private static synchronized Item shelfApps(Context c) {
+        String label = Ui.tr("All Apps");
+        if (shelfAppsTile == null || !label.equals(shelfAppsLabel)) {
+            Bitmap tile = darkTile(TILE_W, TILE_H);
+            Canvas canvas = new Canvas(tile);
+            float icon = TILE_H * 0.27f;
+            Symbols.warm(c, "apps", icon);
+            Symbols.draw(c, canvas, "apps", TILE_W / 2f, TILE_H * 0.37f, icon, 0xF2FFFFFF);
+            TextPaint text = new TextPaint(Ui.text(Ui.medium, 32, 0xF2FFFFFF));
+            text.setTextAlign(Paint.Align.CENTER);
+            String fitted = TextUtils.ellipsize(label, text, TILE_W - 40, TextUtils.TruncateAt.END).toString();
+            canvas.drawText(fitted, TILE_W / 2f, TILE_H * 0.8f, text);
+            tile.setHasMipMap(true);
+            shelfAppsTile = tile;
+            shelfAppsLabel = label;
+        }
+        Item it = shortcut(ALL_APPS, "all", label, "apps");
+        it.setTile(shelfAppsTile);
+        return it;
     }
 
     private static String[] known(String pkg) {
