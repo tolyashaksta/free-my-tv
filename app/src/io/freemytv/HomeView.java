@@ -384,7 +384,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             if (wifiConnected == wifi && vpnConnected == vpn) return;
             wifiConnected = wifi;
             vpnConnected = vpn;
-            statusDirty = true;
+            heroDirty = true;
             wake();
         });
         click = new Click(a);
@@ -3112,6 +3112,11 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
 
     private void drawLightTop(Canvas c) {
         applyTone();
+        // This layer spans the screen; the status layer starts at x=760 and clips the left corner.
+        for (int i = 0; i < lightIndicators.size(); i++) {
+            HomeApps.Item item = lightIndicators.get(i);
+            drawNetworkIndicator(c, item.symbol, i, HomeApps.TOP_WIFI.equals(item.key) ? wifiConnected : vpnConnected);
+        }
         if (!picksOn()) {
             drawClock(c);
             if (HomeData.coinCount() > 0 || playingTab != null) drawQuotes(c);
@@ -3262,10 +3267,6 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
      */
     private void drawLightButtons(Canvas c) {
         applyTone();
-        for (int i = 0; i < lightIndicators.size(); i++) {
-            HomeApps.Item item = lightIndicators.get(i);
-            drawNetworkIndicator(c, item.symbol, i, HomeApps.TOP_WIFI.equals(item.key) ? wifiConnected : vpnConnected);
-        }
         for (int i = 0; i < lightButtons.size(); i++) {
             HomeApps.Item it = lightButtons.get(i);
             RectF r = topRects[3 + i];
