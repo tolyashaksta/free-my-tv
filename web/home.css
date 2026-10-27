@@ -335,17 +335,9 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
   position: absolute;
   left: 0;
   top: 0;
+  -webkit-transition: -webkit-transform 0.3s cubic-bezier(0.2, 0.9, 0.3, 1);
+  transition: transform 0.3s cubic-bezier(0.2, 0.9, 0.3, 1);
 }
-
-.tile-slot {
-  position: absolute;
-  -webkit-transition: -webkit-transform 0.3s cubic-bezier(0.2, 0.9, 0.3, 1), opacity 0.3s;
-  transition: transform 0.3s cubic-bezier(0.2, 0.9, 0.3, 1), opacity 0.3s;
-}
-.tile-slot.focus { z-index: 2; }
-.tile-slot.fixed { z-index: 3; }
-.tile-slot .tile { top: 0; width: 100%; height: 100%; }
-.tile-slot.fixed .sym { position: absolute; }
 
 .tile {
   position: absolute;
@@ -390,10 +382,10 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
   -webkit-transition: opacity 0.17s;
   transition: opacity 0.17s;
 }
-.tile-slot.focus .tile { -webkit-transform: scale(1.2); transform: scale(1.2); box-shadow: 0 18px 40px rgba(0, 0, 0, 0.34); }
-.tile-slot.focus .tile::after { opacity: 1; }
+.tile.focus { -webkit-transform: scale(1.2); transform: scale(1.2); box-shadow: 0 18px 40px rgba(0, 0, 0, 0.34); z-index: 2; }
+.tile.focus::after { opacity: 1; }
 .night .tile { box-shadow: 0 4px 22px rgba(0, 0, 0, 0.3); }
-.night .tile-slot.focus .tile { box-shadow: 0 18px 40px rgba(0, 0, 0, 0.6); }
+.night .tile.focus { box-shadow: 0 18px 40px rgba(0, 0, 0, 0.6); }
 .more { position: absolute; width: 17px; height: 17px; color: rgba(0, 0, 0, 0.6); }
 .more.back { -webkit-transform: scaleX(-1); transform: scaleX(-1); }
 .night .more { color: rgba(255, 255, 255, 0.8); }

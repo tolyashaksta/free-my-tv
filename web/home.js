@@ -79,8 +79,8 @@
     ['jellyfin', /jellyfin/i, /jellyfin/i, ['#AA5CC3', '#00A4DC']],
     ['spotify', /spotify/, /spotify/i, ['#1DB954', '#0F7A36']]
   ];
-  // Shelf tiles shown at once, as on Android: 8 including All Apps (178 wide). The built-in list keeps 8 apps;
-  // they scroll within the remaining slots.
+  // Apps shown at once, as on Android: 8 (today's smallest tiles, 178 wide); the shelf scrolls for the rest. The
+  // built-in list keeps 8 too.
   var SHELF_VISIBLE = 8, FEW_APPS = 8;
 
   function shelfKey(app) {
@@ -284,7 +284,6 @@
   var WANTED = (CONFIG.shelfApps || []).map(function (s) { return s.toLowerCase(); });
 
   function pickShelf() {
-    var fixedFocused = st && st.shelf === shelf.length;
     if (WANTED.length && Prefs.shelfConfig() !== WANTED.join(',')) {
       Prefs.set('shelf', null);
       Prefs.set('shelfConfig', WANTED.join(','));
@@ -311,7 +310,6 @@
       if (!out.length) out = apps.slice(0, FEW_APPS);
     }
     shelf = out;
-    if (fixedFocused) st.shelf = shelf.length;
     others = apps.filter(function (x) { return shelf.indexOf(x) < 0; });
   }
 
@@ -506,7 +504,7 @@
   var shelfFirst = 0, tileStep = 0, tileLeft = 0;
 
   function renderShelf() {
-    var slots = shelfAppSlots(), n = slots + 1, gap = 48, pad = 40;
+    var n = Math.min(shelf.length, SHELF_VISIBLE), gap = 48, pad = 40;
     // 16:9 tiles, as on Android: never taller than 126, and the glass keeps its bottom edge.
     var tw = Math.min(126 * 16 / 9, (1760 - Math.max(0, n - 1) * gap) / Math.max(1, n)), th = tw * 9 / 16;
     var width = n * tw + Math.max(0, n - 1) * gap, left = (1920 - width) / 2;
@@ -521,22 +519,13 @@
     tiles.innerHTML = '';
     tileStep = tw + gap;
     tileLeft = left;
-    shelfFirst = Math.max(0, Math.min(shelfFirst, shelf.length - slots));
-    for (var i = 0; i <= shelf.length; i++) {
-      var t = el('div', 'tile-slot' + (i === shelf.length ? ' fixed' : ''), tiles);
+    shelfFirst = Math.max(0, Math.min(shelfFirst, shelf.length - n));
+    for (var i = 0; i < shelf.length; i++) {
+      var t = el('div', 'tile', tiles);
       t.style.top = (854 + 126 - th) + 'px';
       t.style.width = tw + 'px';
       t.style.height = th + 'px';
-      var tile = el('div', 'tile', t);
-      if (i === shelf.length) {
-        paint(tile, '#2B2E3A', '#17191F');
-        var icon = sym('apps', tile);
-        icon.style.left = '35%'; icon.style.top = '17%';
-        icon.style.width = '30%'; icon.style.height = '40%';
-        var label = el('div', 'word', tile, tr('All Apps'));
-        label.style.top = '73%';
-        label.style.fontSize = tw * 32 / 384 + 'px';
-      } else face(shelf[i], tile, wordFit(shelf[i].title, tw, 30));
+      face(shelf[i], t, wordFit(shelf[i].title, tw, 30));
       hover(t, Z.SHELF, i);
     }
     // More apps than fit: a small arrow inside the glass's edge on each side that has more, where no tile reaches
@@ -545,25 +534,23 @@
     for (var a = 0; a < 2; a++) {
       var arrow = sym('chevron_right', platter);
       arrow.className += a ? ' more' : ' more back';
-      arrow.style.left = (a ? pad + slots * tileStep - gap / 2 : 14) - 8.5 + 'px';
+      arrow.style.left = (a ? width + 2 * pad - 14 : 14) - 8.5 + 'px';
       arrow.style.top = (pad + th / 2 - 8.5) + 'px';
     }
-    st.shelf = Math.min(st.shelf, shelf.length);
+    st.shelf = Math.min(st.shelf, Math.max(0, shelf.length - 1));
     placeTiles();
   }
 
-  function shelfAppSlots() { return Math.min(shelf.length, SHELF_VISIBLE - 1); }
-
-  /** App slots slide while All Apps stays fixed; the inner tile keeps its own focus scale. */
+  /** The row slides (a transform on #tiles, which old TVs animate), and the apps it takes past the glass fade out. */
   function placeTiles() {
-    var tiles = $('tiles').children, n = shelfAppSlots();
-    for (var i = 0; i <= shelf.length; i++) {
-      var fixed = i === shelf.length, shown = fixed || (i >= shelfFirst && i < shelfFirst + n);
-      tiles[i].style.left = (tileLeft + (fixed ? n : i) * tileStep) + 'px';
-      tiles[i].style.webkitTransform = tiles[i].style.transform = 'translateX(' + (fixed ? 0 : -shelfFirst * tileStep) + 'px)';
+    var row = $('tiles'), tiles = row.children, n = Math.min(shelf.length, SHELF_VISIBLE);
+    for (var i = 0; i < shelf.length; i++) {
+      var shown = i >= shelfFirst && i < shelfFirst + n;
+      tiles[i].style.left = (tileLeft + i * tileStep) + 'px';
       tiles[i].style.opacity = shown ? '' : '0';
       tiles[i].style.pointerEvents = shown ? '' : 'none';
     }
+    row.style.webkitTransform = row.style.transform = 'translateX(' + (-shelfFirst * tileStep) + 'px)';
     var arrows = $('platter').children;
     arrows[0].style.visibility = shelfFirst > 0 ? '' : 'hidden';
     arrows[1].style.visibility = shelfFirst + n < shelf.length ? '' : 'hidden';
@@ -571,22 +558,11 @@
 
   /** Scrolls the shelf, one app at a time, so the focused app is shown. */
   function revealShelf() {
-    if (st.shelf === shelf.length) return;
-    var n = shelfAppSlots();
+    var n = Math.min(shelf.length, SHELF_VISIBLE);
     var first = Math.max(0, Math.min(Math.max(shelfFirst, st.shelf - n + 1), Math.min(st.shelf, shelf.length - n)));
     if (first === shelfFirst || !shelf.length) return;
     shelfFirst = first;
     placeTiles();
-  }
-
-  /** Only visible apps and the pinned tile can be reached vertically. */
-  function nearestShelf(x) {
-    var tiles = $('tiles').children, best = shelf.length, bestD = Math.abs(centerX(tiles[best]) - x);
-    for (var i = shelfFirst; i < Math.min(shelf.length, shelfFirst + shelfAppSlots()); i++) {
-      var d = Math.abs(centerX(tiles[i]) - x);
-      if (d < bestD) { bestD = d; best = i; }
-    }
-    return best;
   }
 
   // MARK: - Drawer
@@ -705,7 +681,7 @@
   function closeDrawer() {
     var keys = document.querySelectorAll('#drawer .key');
     st.zone = Z.SHELF;
-    st.shelf = nearestShelf(centerX(keys[st.drawer]));
+    if (shelf.length) st.shelf = nearest($('tiles').children, centerX(keys[st.drawer]));
     updateFocus();
   }
 
@@ -1273,8 +1249,7 @@
         if (app) launcher(app.id, app.title)();
         return;
       case Z.SHELF:
-        if (st.shelf === shelf.length) openApps();
-        else if (shelf[st.shelf]) launcher(shelf[st.shelf].id, shelf[st.shelf].title)();
+        if (shelf[st.shelf]) launcher(shelf[st.shelf].id, shelf[st.shelf].title)();
         return;
       case Z.DRAWER:
         if (drawerItems[st.drawer]) drawerItems[st.drawer].run();
@@ -1313,8 +1288,7 @@
     var tiles = $('tiles').children, cardNodes = $('cards').children;
     switch (st.zone) {
       case Z.SHELF:
-        if (dx) st.shelf = st.shelf === shelf.length && dx < 0 ? Math.max(0, shelfFirst + shelfAppSlots() - 1)
-          : Math.max(0, Math.min(shelf.length, st.shelf + dx));
+        if (dx) st.shelf = Math.max(0, Math.min(shelf.length - 1, st.shelf + dx));
         else if (dy > 0) { openDrawer(); return; }
         else if (dy < 0) {
           if (cards.length) { st.zone = Z.CARDS; st.card = nearest(cardNodes, centerX(tiles[st.shelf])); }
@@ -1324,7 +1298,7 @@
       case Z.CARDS:
         if (dx) st.card = Math.max(0, Math.min(cards.length - 1, st.card + dx));
         else if (dy < 0) { st.zone = Z.TOP; st.top = st.tab; }
-        else { st.zone = Z.SHELF; st.shelf = nearestShelf(centerX(cardNodes[st.card])); }
+        else if (shelf.length) { st.zone = Z.SHELF; st.shelf = nearest(tiles, centerX(cardNodes[st.card])); }
         break;
       case Z.TOP:
         if (dx) {
@@ -1381,7 +1355,7 @@
     if (st.zone === Z.ABOUT) { closeAbout(); return; }
     if (sheetOpen()) { closeSheets(); return; }
     if (st.zone === Z.DRAWER) { closeDrawer(); return; }
-    if (st.zone !== Z.SHELF) { st.zone = Z.SHELF; updateFocus(); return; }
+    if (st.zone !== Z.SHELF && shelf.length) { st.zone = Z.SHELF; updateFocus(); return; }
     TV.back();
   }
 

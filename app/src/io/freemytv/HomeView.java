@@ -1208,7 +1208,6 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         wake();
         cancelReorder(true);    // the list changed under the move (an app installed or removed)
         tileShaders = new LinearGradient[0];
-        boolean fixedFocused = !shelf.isEmpty() && shelfIndex == shelfAppCount();
         boolean same = list.size() == shelf.size();
         for (int i = 0; same && i < list.size(); i++) same = list.get(i).key.equals(shelf.get(i).key);
         shelf = list;
@@ -1221,7 +1220,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
                 tileSlide[i] = new Spring(0.32f, 0.86f, 0);
                 tileRects[i] = new RectF();
             }
-            shelfIndex = fixedFocused ? shelfAppCount() : Math.min(shelfIndex, Math.max(0, list.size() - 1));
+            shelfIndex = Math.min(shelfIndex, Math.max(0, list.size() - 1));
             retarget(true);
             layoutShelf();
         }
@@ -1241,11 +1240,9 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         float top = (L_PLATTER_TOP + L_TILE_H) * k - th;
         platterRect.set(left - pad, top, left + width + pad, top + th + 2 * pad);
         snap(platterRect);
-        int apps = shelfAppCount(), slots = shelfAppSlots();
-        shelfFirst = ShelfLayout.first(apps, slots, shelfFirst, apps);
+        shelfFirst = Math.max(0, Math.min(shelfFirst, shelf.size() - n));
         float x = left - shelfFirst * (tw + gap), y = top + pad;
         for (int i = 0; i < shelf.size(); i++) {
-            if (i == apps) x = left + slots * (tw + gap);   // All Apps stays at the right edge
             tileRects[i].set(x, y, x + tw, y + th);
             snap(tileRects[i]);
             x += tw + gap;
@@ -1255,11 +1252,11 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
 
     /** Scrolls the shelf, one app at a time, so the focused app is shown: the tiles slide there (unless `snap`). */
     private void revealShelf(boolean snap) {
-        int apps = shelfAppCount();
-        int first = ShelfLayout.first(apps, shelfAppSlots(), shelfFirst, shelfIndex);
+        int n = Math.min(shelf.size(), shelfVisible);
+        int first = Math.max(0, Math.min(Math.max(shelfFirst, shelfIndex - n + 1), Math.min(shelfIndex, shelf.size() - n)));
         if (first == shelfFirst || tileRects.length == 0) return;
         float dx = (shelfFirst - first) * (tileRects[0].width() + TILE_GAP * k);
-        for (int i = 0; i < apps; i++) {
+        for (int i = 0; i < tileRects.length; i++) {
             tileRects[i].offset(dx, 0);
             if (!snap && i < tileSlide.length) tileSlide[i].value -= dx;
         }
@@ -1268,25 +1265,6 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         if (snap) return;
         reorderAnim = true;   // the same slides as moving an app
         wake();
-    }
-
-    private int shelfAppCount() {
-        return Math.max(0, shelf.size() - 1);
-    }
-
-    private int shelfAppSlots() {
-        return ShelfLayout.appSlots(shelfAppCount(), shelfVisible);
-    }
-
-    /** Hidden apps can lie behind the fixed tile, so vertical navigation only considers visible tiles. */
-    private int nearestShelf(float x) {
-        int apps = shelfAppCount(), best = apps;
-        float distance = shelf.isEmpty() ? Float.MAX_VALUE : Math.abs(tileRects[apps].centerX() - x);
-        for (int i = shelfFirst; i < Math.min(apps, shelfFirst + shelfAppSlots()); i++) {
-            float d = Math.abs(tileRects[i].centerX() - x);
-            if (d < distance) { distance = d; best = i; }
-        }
-        return best;
     }
 
     /** Shelf layer: the glass bar and its shadow (it only changes with the background). */
@@ -1466,16 +1444,16 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             }
         }
         if (liftIndex >= 0 && liftIndex < shelf.size() && moveLift.value > 0.02f) top = liftIndex;
-        int apps = shelfAppCount(), last = Math.min(apps, shelfFirst + shelfAppSlots());
+        int last = Math.min(shelf.size(), shelfFirst + shelfVisible);
         // Scrolling, tiles slide in and out through the glass's sides (only those that show any part are drawn). Only
         // then: on a shelf that fits, the clip would cut the end tiles' shadows in a straight line.
-        boolean scrolls = apps > shelfAppSlots();
+        boolean scrolls = shelf.size() > shelfVisible;
         if (scrolls) {
             c.save();
-            c.clipRect(platterRect.left, 0, tileRects[apps].left - TILE_GAP * k / 2, h);
+            c.clipRect(platterRect.left, 0, platterRect.right, h);
         }
         for (int pass = 0; pass < 2; pass++) {
-            for (int i = 0; i < apps; i++) {
+            for (int i = 0; i < shelf.size(); i++) {
                 if ((pass == 0) == (i == top)) continue;
                 float slid = i < tileSlide.length ? tileSlide[i].value : 0;
                 if (tileRects[i].right + slid <= platterRect.left || tileRects[i].left + slid >= platterRect.right) continue;
@@ -1495,12 +1473,11 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             }
         }
         if (scrolls) c.restore();
-        if (!shelf.isEmpty()) drawShelfTile(c, apps);
         // More apps than fit: a small arrow inside the glass's edge on each side that has more, where no tile reaches
         // even focused (inside the screen's safe area).
         float cy = platterRect.centerY(), size = 28 * k, inset = 14 * k;
         int ink = tone(0x99000000, 0xCCFFFFFF);
-        if (last < apps) Symbols.draw(getContext(), c, "chevron_right", tileRects[apps].left - TILE_GAP * k / 2, cy, size, ink);
+        if (last < shelf.size()) Symbols.draw(getContext(), c, "chevron_right", platterRect.right - inset, cy, size, ink);
         if (shelfFirst > 0) {
             c.save();
             c.scale(-1, 1, platterRect.left + inset, cy);
@@ -1721,7 +1698,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         drawer.target = 0;
         zone = Z_SHELF;
         for (Spring f : drawerFocus) f.snap(0);   // the drawer goes away: its focus doesn't need to animate
-        if (!shelf.isEmpty() && drawerIndex < drawerRects.length) shelfIndex = nearestShelf(drawerRects[drawerIndex].centerX());
+        if (!shelf.isEmpty() && drawerIndex < drawerRects.length) shelfIndex = nearest(tileRects, drawerRects[drawerIndex].centerX());
     }
 
     /** Color for the drawer's text and symbols: dark by day, white at night. */
@@ -2357,7 +2334,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         switch (zone) {
             case Z_SHELF:
                 if (dx != 0) {
-                    int next = ShelfLayout.next(shelfAppCount(), shelfAppSlots(), shelfFirst, shelfIndex, dx);
+                    int next = Math.max(0, Math.min(shelf.size() - 1, shelfIndex + dx));
                     if (next == shelfIndex) return;
                     shelfIndex = next;
                 } else if (dy < 0) {
@@ -2395,7 +2372,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
                         zone = Z_HERO;
                     } else {
                         zone = Z_SHELF;
-                        if (!shelf.isEmpty()) shelfIndex = nearestShelf(statusRects[statusIndex].centerX());
+                        if (!shelf.isEmpty()) shelfIndex = nearest(tileRects, statusRects[statusIndex].centerX());
                     }
                 } else {
                     return;
@@ -2595,7 +2572,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     // MARK: - Moving apps on the shelf
 
     private boolean canReorder() {
-        if (sheetOpen || zone != Z_SHELF || shelfIndex >= shelf.size() || shelfAppCount() < 2) return false;
+        if (sheetOpen || zone != Z_SHELF || shelfIndex >= shelf.size() || shelf.size() < 2) return false;
         HomeApps.Item it = shelf.get(shelfIndex);
         return it.kind == HomeApps.APP && it.pkg != null;
     }
@@ -2655,7 +2632,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     /** Swaps the lifted app with its neighbor; both slide from where they are to their new slots. */
     private void shiftReorder(int dx) {
         int i = shelfIndex, j = i + dx;
-        if (j < 0 || j >= shelfAppCount()) return;
+        if (j < 0 || j >= shelf.size()) return;
         HomeApps.Item it = shelf.get(i);
         shelf.set(i, shelf.get(j));
         shelf.set(j, it);
@@ -2692,7 +2669,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         retarget(false);
         if (!changed) return;
         final List<String> order = new ArrayList<>();
-        for (HomeApps.Item it : shelf) if (it.kind == HomeApps.APP && it.pkg != null) order.add(it.pkg);
+        for (HomeApps.Item it : shelf) order.add(it.pkg);
         final Context c = getContext().getApplicationContext();
         LOADER.execute(() -> {
             // The saved list may hold more than the shelf shows (apps not installed, past the limit): the shown ones
@@ -2783,8 +2760,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         }
         for (int i = picksOn() ? 0 : 3; i < 3 + lightButtons.size(); i++) out.add(a11yId(Z_TOP, i));
         for (int i = 0; i < Math.min(Recs.MAX_CARDS, cards.size()); i++) out.add(a11yId(Z_CARDS, i));
-        for (int i = shelfFirst; i < Math.min(shelfAppCount(), shelfFirst + shelfAppSlots()); i++) out.add(a11yId(Z_SHELF, i));
-        if (!shelf.isEmpty()) out.add(a11yId(Z_SHELF, shelfAppCount()));
+        for (int i = shelfFirst; i < Math.min(shelf.size(), shelfFirst + shelfVisible); i++) out.add(a11yId(Z_SHELF, i));
         for (int i = 0; i < drawerItems.size(); i++) out.add(a11yId(Z_DRAWER, i));
         if (drawerOpen && Prefs.weather()) out.add(a11yId(WIDGETS, 0));
         if (drawerOpen && Prefs.quotes() && HomeData.active().length > 0) out.add(a11yId(WIDGETS, 1));
@@ -2803,7 +2779,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             case Z_SHELF:
                 if (reordering && i == shelfIndex) {
                     return Ui.trf("Moving {app}, position {n} of {total}",
-                            "app", label(shelf, i), "n", i + 1, "total", shelfAppCount());
+                            "app", label(shelf, i), "n", i + 1, "total", shelf.size());
                 }
                 return label(shelf, i);
             case Z_DRAWER: return label(drawerItems, i);
@@ -3323,7 +3299,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
                     topIndex = tab;     // as on Apple TV: moving up to the tabs focuses the selected tab
                 } else {
                     zone = Z_SHELF;
-                    if (!shelf.isEmpty()) shelfIndex = nearestShelf(cardRects[cardIndex].centerX());
+                    if (!shelf.isEmpty()) shelfIndex = nearest(tileRects, tileRects.length, cardRects[cardIndex].centerX());
                 }
                 break;
             case Z_TOP:
