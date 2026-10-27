@@ -26,6 +26,8 @@ import android.media.tv.TvContract;
 import android.media.tv.TvInputInfo;
 import android.media.tv.TvInputManager;
 import android.provider.Settings;
+import android.text.TextPaint;
+import android.text.TextUtils;
 import android.util.DisplayMetrics;
 import android.view.View;
 
@@ -165,6 +167,8 @@ final class HomeApps {
 
     private static final Map<String, Bitmap> TILES = new HashMap<>();   // key → ready card
     private static final Map<String, Bitmap> LOGOS = new HashMap<>();   // key → colored logo with no background
+    private static Bitmap shelfAppsTile;
+    private static String shelfAppsLabel;
 
     /**
      * Home screen apps. `extract`: also lifts the logos that are not on disk yet (slow: background only); without it,
@@ -176,6 +180,10 @@ final class HomeApps {
         int max = maxShelf(c);
         for (String pkg : shelfPackages(c)) {
             if (items.size() >= max) break;
+            if (Prefs.ALL_APPS.equals(pkg)) {
+                items.add(shelfApps(c));
+                continue;
+            }
             Intent launch = launchIntent(pm, pkg);
             if (launch == null) continue;
             ResolveInfo ri = pm.resolveActivity(launch, 0);
@@ -202,6 +210,33 @@ final class HomeApps {
         return items;
     }
 
+    /** The built-in All Apps shortcut uses the same saved order and limit as apps. */
+    private static synchronized Item shelfApps(Context c) {
+        String label = Ui.tr("All Apps");
+        if (shelfAppsTile == null || !label.equals(shelfAppsLabel)) {
+            Bitmap tile = darkTile(TILE_W, TILE_H);
+            Canvas canvas = new Canvas(tile);
+            float icon = TILE_H * 0.27f;
+            Symbols.warm(c, "apps", icon);
+            Symbols.draw(c, canvas, "apps", TILE_W / 2f, TILE_H * 0.37f, icon, 0xF2FFFFFF);
+            TextPaint text = new TextPaint(Ui.text(Ui.medium, 32, 0xF2FFFFFF));
+            text.setTextAlign(Paint.Align.CENTER);
+            String fitted = TextUtils.ellipsize(label, text, TILE_W - 40, TextUtils.TruncateAt.END).toString();
+            canvas.drawText(fitted, TILE_W / 2f, TILE_H * 0.8f, text);
+            tile.setHasMipMap(true);
+            shelfAppsTile = tile;
+            shelfAppsLabel = label;
+        }
+        Item it = shortcut(ALL_APPS, "all", label, "apps");
+        it.pkg = Prefs.ALL_APPS;
+        it.setTile(shelfAppsTile);
+        return it;
+    }
+
+    static boolean shelfAvailable(PackageManager pm, String pkg) {
+        return Prefs.ALL_APPS.equals(pkg) || launchIntent(pm, pkg) != null;
+    }
+
     private static String[] known(String pkg) {
         for (String[] d : SHELF) if (d[2].equals(pkg)) return d;
         return null;
@@ -223,11 +258,12 @@ final class HomeApps {
         return out;
     }
 
-    /** Every app the shelf could hold, as {package, name}: the ones from SHELF first, then the other TV apps by name. */
+    /** Shelf choices as {package or shortcut, name}: All Apps, known apps, then other TV apps by name. */
     static List<String[]> shelfCandidates(Context c) {
         PackageManager pm = c.getPackageManager();
         List<String[]> out = new ArrayList<>();
         Set<String> seen = new HashSet<>();
+        out.add(new String[] {Prefs.ALL_APPS, Ui.tr("All Apps")});
         for (String[] d : SHELF) if (launchIntent(pm, d[2]) != null && seen.add(d[2])) out.add(new String[] {d[2], d[1]});
         List<String[]> more = new ArrayList<>();
         for (String[] app : launchable(c)) {

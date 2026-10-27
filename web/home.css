@@ -353,6 +353,16 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 .tile img { position: absolute; left: 50%; top: 50%; max-width: 76%; max-height: 62%; -webkit-transform: translate(-50%, -50%); transform: translate(-50%, -50%); }
 /* a logo lifted off the TV's icon (home.js): as large as the tile allows */
 .tile img.logo { width: 70%; height: 50%; max-width: none; max-height: none; object-fit: contain; }
+.tile.shortcut .sym {
+  position: absolute;
+  left: 50%;
+  top: 37%;
+  width: 40px;
+  height: 40px;
+  -webkit-transform: translate(-50%, -50%);
+  transform: translate(-50%, -50%);
+}
+.tile.shortcut .word { top: 74%; font-weight: 500; }
 .tile .word {
   position: absolute;
   left: 8%;

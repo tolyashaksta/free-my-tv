@@ -50,7 +50,7 @@ final class Prefs {
      */
     static final int KEY_HISENSE_PRIME = 295, KEY_HISENSE_YOUTUBE = KeyEvent.KEYCODE_BUTTON_3, KEY_HISENSE_DISNEY = 607,
             KEY_HISENSE_APPS = 284, KEY_HISENSE_SETTINGS = KeyEvent.KEYCODE_NOTIFICATION, KEY_HISENSE_PROFILE = 288;
-    /** A button's value that opens this home screen's All Apps. */
+    /** A remote button or shelf entry that opens this home screen's All Apps. */
     static final String ALL_APPS = HomeMode.PKG + "#all";
     static final int[] KEYS = RemoteKeys.HISENSE ? new int[] {KEY_HISENSE_PRIME, KEY_HISENSE_YOUTUBE, KEY_HISENSE_DISNEY,
                     KEY_HISENSE_APPS, KEY_HISENSE_SETTINGS, KEY_HISENSE_PROFILE}
@@ -240,7 +240,7 @@ final class Prefs {
 
     // MARK: - Shelf
 
-    /** Packages on the home shelf, in order; null until the user edits it (then the built-in list applies). */
+    /** Packages and shortcuts on the home shelf, in order; null uses the built-in list. */
     static List<String> shelf() {
         String v = sp().getString("shelf", null);
         if (v == null) return null;

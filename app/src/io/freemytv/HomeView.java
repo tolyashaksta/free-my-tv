@@ -2544,7 +2544,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             boolean on = false;
             for (String p : list) {
                 if (shown >= max) break;
-                if (HomeApps.launchIntent(pm, p) == null) continue;
+                if (!HomeApps.shelfAvailable(pm, p)) continue;
                 shown++;
                 on |= p.equals(it.pkg);
             }
@@ -2574,7 +2574,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private boolean canReorder() {
         if (sheetOpen || zone != Z_SHELF || shelfIndex >= shelf.size() || shelf.size() < 2) return false;
         HomeApps.Item it = shelf.get(shelfIndex);
-        return it.kind == HomeApps.APP && it.pkg != null;
+        return (it.kind == HomeApps.APP || it.kind == HomeApps.ALL_APPS) && it.pkg != null;
     }
 
     private void startReorder() {

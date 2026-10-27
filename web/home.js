@@ -82,6 +82,11 @@
   // Apps shown at once, as on Android: 8 (today's smallest tiles, 178 wide); the shelf scrolls for the rest. The
   // built-in list keeps 8 too.
   var SHELF_VISIBLE = 8, FEW_APPS = 8;
+  var ALL_APPS_ID = 'io.freemytv#all';
+
+  function shelfApps() {
+    return {id: ALL_APPS_ID, title: tr('All Apps'), symbol: 'apps'};
+  }
 
   function shelfKey(app) {
     for (var i = 0; i < SHELF.length; i++) if (SHELF[i][1].test(app.id) || SHELF[i][2].test(app.title)) return SHELF[i];
@@ -260,6 +265,7 @@
     var top = k ? k[3][0] : app.color ? darken(app.color, 0.92) : '#2A2A2E';
     var bottom = k ? k[3][1] : app.color ? darken(app.color, 0.62) : '#161618';
     paint(box, top, bottom);
+    if (app.symbol) { setClass(box, 'shortcut', true); sym(app.symbol, box); }
     var word = el('div', 'word', box, app.title);
     if (wordSize) word.style.fontSize = wordSize + 'px';
     if (app.icon) {
@@ -288,10 +294,10 @@
       Prefs.set('shelf', null);
       Prefs.set('shelfConfig', WANTED.join(','));
     }
-    var chosen = Prefs.shelf(), out = [];
+    var chosen = Prefs.shelf(), out = [], candidates = [shelfApps()].concat(apps);
     if (chosen) {
       for (var i = 0; i < chosen.length; i++) {
-        for (var j = 0; j < apps.length; j++) if (apps[j].id === chosen[i]) out.push(apps[j]);
+        for (var j = 0; j < candidates.length; j++) if (candidates[j].id === chosen[i]) out.push(candidates[j]);
       }
     } else if (WANTED.length) {
       for (var w = 0; w < WANTED.length; w++) {
@@ -864,6 +870,7 @@
     if (pick && code !== pickedLanguage()) {
       Prefs.set('language', code);
       I18N.set(Prefs.language());
+      pickShelf();
       renderAll();
       Data.refresh();   // the picks' titles and genres come in the new language
     }
@@ -1160,7 +1167,7 @@
 
   function editList() {
     var ids = shelf.map(function (a) { return a.id; });
-    return {ids: ids, rows: apps.slice().sort(function (a, b) {
+    return {ids: ids, rows: [shelfApps()].concat(apps).sort(function (a, b) {
       var ia = ids.indexOf(a.id), ib = ids.indexOf(b.id);
       if (ia >= 0 || ib >= 0) return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib);
       return a.title.toLowerCase() < b.title.toLowerCase() ? -1 : 1;
@@ -1219,6 +1226,7 @@
 
   function launcher(id, name) {
     return function () {
+      if (id === ALL_APPS_ID) { openApps(); return; }
       TV.launch(id, null, function (ok) {
         if (!ok) toast(trf("Couldn't open {app}.", {app: name || id}));
       });
