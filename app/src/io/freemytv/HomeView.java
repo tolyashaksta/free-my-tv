@@ -276,6 +276,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private final Paint sheen = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint veil = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint fill = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint networkSlash = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint tileFill = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final RectF tmp = new RectF(), cell = new RectF(), screen = new RectF();
     private final TextPaint fitPaint = new TextPaint();
@@ -641,6 +642,9 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     }
 
     private void makePaints() {
+        networkSlash.setColor(NETWORK_OFF);
+        networkSlash.setStrokeWidth(3 * k);
+        networkSlash.setStrokeCap(Paint.Cap.ROUND);
         labelPaint = Ui.text(Ui.medium, 25 * k, 0xC7FFFFFF);
         labelPaint.setLetterSpacing(0.1f);
         titlePaint = new TextPaint(Ui.text(Ui.displayMedium, 76 * k, 0xFFFFFFFF));
@@ -3313,6 +3317,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         // Smoked glass keeps the white connection state legible in the day look too.
         scene.liquid(c, cell, rad, SMOKE, 0.5f, 0.01f, 12 * k, 8 * k, 0.45f, 1);
         Symbols.draw(getContext(), c, symbol, cx, cy, 27 * k, connected ? NETWORK_ON : NETWORK_OFF);
+        if (!connected) c.drawLine(cx - 15 * k, cy - 15 * k, cx + 15 * k, cy + 15 * k, networkSlash);
     }
 
     private boolean moveLight(int dx, int dy) {

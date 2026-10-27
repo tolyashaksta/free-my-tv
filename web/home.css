@@ -203,6 +203,19 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
   color: #5C5C62;
 }
 .round.network-indicator.active, .night .round.network-indicator.active { color: rgba(255, 255, 255, 0.92); }
+.round.network-indicator:after {
+  content: '';
+  position: absolute;
+  left: 13px;
+  top: 32.5px;
+  width: 42px;
+  height: 3px;
+  border-radius: 2px;
+  background: currentColor;
+  -webkit-transform: rotate(45deg);
+  transform: rotate(45deg);
+}
+.round.network-indicator.active:after { display: none; }
 
 /* MARK: - Picks: the card with focus is wide, the others narrow (posters); it grows 5%, rises and its edge lights up. */
 
