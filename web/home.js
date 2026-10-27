@@ -385,9 +385,31 @@
   // MARK: - Top: title, tabs, buttons, quotes
 
   var TAB_KIND = [null, 'movie', 'tv'];
+  var networkState = {wifi: false, vpn: false}, networkPending = false;
+
+  function updateNetworkStatus() {
+    if (document.hidden || networkPending) return;
+    networkPending = true;
+    TV.networkStatus(function (state) {
+      networkPending = false;
+      networkState = state;
+      setClass($('network-wifi'), 'active', state.wifi);
+      setClass($('network-vpn'), 'active', state.vpn);
+    });
+  }
 
   function renderTop() {
     $('title').textContent = tr('For You');
+    var indicators = $('network-status');
+    indicators.innerHTML = '';
+    var networks = ['wifi', 'vpn'];
+    for (var n = 0; n < networks.length; n++) {
+      var name = networks[n];
+      var indicator = el('div', 'round network-indicator' + (networkState[name] ? ' active' : ''), indicators);
+      indicator.id = 'network-' + name;
+      indicator.style.left = (80 + 88 * n) + 'px';
+      sym(name, indicator);
+    }
     var tabs = $('tabs');
     tabs.innerHTML = '';
     var names = [tr('Explore'), tr('Movies'), tr('Shows')];
@@ -1587,6 +1609,7 @@
   document.addEventListener('visibilitychange', function () {
     if (document.hidden) { hideSaver(); return; }
     idleAt = Date.now();
+    updateNetworkStatus();
     loadApps(function () { renderShelf(); renderDrawer(); updateFocus(); Data.refresh(); });
   });
 
@@ -1596,6 +1619,10 @@
   TV.holdScreenSaver(function () { return !sheetOpen() && saverPhotos().length > 0; });
   fit();
   renderTop();
+  updateNetworkStatus();
+  window.addEventListener('online', updateNetworkStatus);
+  window.addEventListener('offline', updateNetworkStatus);
+  setInterval(updateNetworkStatus, 15000);
   tickClock();
   loadApps(function () {
     renderAll();

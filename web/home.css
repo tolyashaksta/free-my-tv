@@ -93,7 +93,7 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 
 #title {
   position: absolute;
-  left: 76px;
+  left: 252px;
   top: 52px;
   margin: 0;
   font-size: 76px;
@@ -194,6 +194,15 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 }
 .night .round.focus { background: #FFF; color: #1D1D1F; }
 .night .round.focus .tip { color: #F5F5F7; }
+
+/* Read-only connection indicators. Smoked glass keeps white visible in the day look too. */
+.round.network-indicator, .night .round.network-indicator {
+  pointer-events: none;
+  background: -webkit-linear-gradient(top, rgba(40, 40, 44, 0.8), rgba(17, 17, 19, 0.62));
+  background: linear-gradient(rgba(40, 40, 44, 0.8), rgba(17, 17, 19, 0.62));
+  color: #8E8E93;
+}
+.round.network-indicator.active, .night .round.network-indicator.active { color: rgba(255, 255, 255, 0.92); }
 
 /* MARK: - Picks: the card with focus is wide, the others narrow (posters); it grows 5%, rises and its edge lights up. */
 

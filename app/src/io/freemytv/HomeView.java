@@ -109,6 +109,8 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private final HomeData data;
     private final Recs recs;
     private final NowPlaying.Watch playing;
+    private final NetworkStatus networkStatus;
+    private boolean wifiConnected, vpnConnected;
     private final Click click;
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final SharedPreferences ui;
@@ -377,6 +379,13 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         data = HomeData.get(a);
         recs = Recs.get(a);
         playing = new NowPlaying.Watch(a, this::onPlaying);
+        networkStatus = new NetworkStatus(a, (wifi, vpn) -> {
+            if (wifiConnected == wifi && vpnConnected == vpn) return;
+            wifiConnected = wifi;
+            vpnConnected = vpn;
+            statusDirty = true;
+            wake();
+        });
         click = new Click(a);
         shelfVisible = HomeApps.shelfVisible(a);
         ui = a.getSharedPreferences("home-ui", Context.MODE_PRIVATE);
@@ -429,6 +438,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     void resume() {
         if (running) return;
         running = true;
+        networkStatus.start();
         checkNight(false);
         boolean h24 = Prefs.clock24();
         if (h24 != clock24) {   // 12/24 hours changed in the TV's settings: the clock and the drawer's times again
@@ -474,6 +484,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     void pause() {
         if (!running) return;
         running = false;
+        networkStatus.stop();
         cancelReorder(true);
         handler.removeCallbacks(holdStart);
         okHeld = holdArmed = false;
@@ -489,6 +500,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
 
     void destroy() {
         pause();
+        networkStatus.close();
         if (launcherApps != null) launcherApps.unregisterCallback(packages);
         click.release();
     }
@@ -2997,6 +3009,8 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             Symbols.warm(getContext(), it.symbol, 27 * k);
             Symbols.warm(getContext(), it.symbol, 27 * k * 1.1f);
         }
+        Symbols.warm(getContext(), "wifi", 27 * k);
+        Symbols.warm(getContext(), "vpn", 27 * k);
         Symbols.warmWeather(getContext(), 40 * k);
         heroDirty = statusDirty = true;
         layoutCards();
@@ -3099,7 +3113,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             return;
         }
         String hello = Ui.tr("For You");
-        c.drawText(hello, MARGIN * k - Ui.leftBearing(lTitle, hello), L_TITLE_BASE * k, lTitle);
+        c.drawText(hello, (MARGIN + 2 * (L_BUTTON + L_BUTTON_GAP)) * k - Ui.leftBearing(lTitle, hello), L_TITLE_BASE * k, lTitle);
         // Text tabs (the selected one in bold, in the main text color); with focus on the tabs, the selected one gets
         // the white pill with a shadow and grows a little (the tvOS focus).
         float focus = Ui.clamp(topFocus[tab].value);
@@ -3242,6 +3256,8 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
      */
     private void drawLightButtons(Canvas c) {
         applyTone();
+        drawNetworkIndicator(c, "wifi", 0, wifiConnected);
+        drawNetworkIndicator(c, "vpn", 1, vpnConnected);
         for (int i = 0; i < lightButtons.size(); i++) {
             HomeApps.Item it = lightButtons.get(i);
             RectF r = topRects[3 + i];
@@ -3273,6 +3289,20 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         float tw = lQuote.measureText(sleepText), size = lQuote.getTextSize();
         c.drawText(sleepText, right - tw, cy + Ui.halfCap(lQuote), lQuote);
         Symbols.draw(getContext(), c, "bedtime", right - tw - size * 0.9f, cy, size, lQuote.getColor());
+    }
+
+    /** Status only: the same size and spacing as the top buttons, without a focus or a click target. */
+    private void drawNetworkIndicator(Canvas c, String symbol, int index, boolean connected) {
+        float cx = (MARGIN + L_BUTTON / 2 + index * (L_BUTTON + L_BUTTON_GAP)) * k;
+        float cy = L_BUTTON_CY * k, rad = L_BUTTON * k / 2;
+        cell.set(cx - rad, cy - rad, cx + rad, cy + rad);
+        tmp.set(cell);
+        tmp.offset(0, 6 * k);
+        shadow.setColor(Ui.alpha(0xFF000000, tone(0.1f, 0.3f)));
+        shadows.draw(c, tmp, rad, SHADOW_BLUR * k, shadow);
+        // Smoked glass keeps the white connection state legible in the day look too.
+        scene.liquid(c, cell, rad, SMOKE, 0.5f, 0.01f, 12 * k, 8 * k, 0.45f, 1);
+        Symbols.draw(getContext(), c, symbol, cx, cy, 27 * k, connected ? 0xEBFFFFFF : L_FAINT);
     }
 
     private boolean moveLight(int dx, int dy) {

@@ -343,6 +343,45 @@ var TV = (function () {
 
   // MARK: - About this TV
 
+  /** Local connection state only. These TV web APIs do not expose a VPN state; keep it off when unknown. */
+  function networkStatus(done) {
+    var finished = false, bridge = null;
+    var timer = setTimeout(function () { finish(false); }, 3000);
+    function finish(wifi) {
+      if (finished) return;
+      finished = true;
+      clearTimeout(timer);
+      if (bridge) {
+        var i = calls.indexOf(bridge);
+        if (i >= 0) calls.splice(i, 1);
+        try { bridge.cancel(); } catch (e) {}
+      }
+      done({wifi: !!wifi, vpn: false});
+    }
+    if (webos) {
+      try {
+        bridge = new window.PalmServiceBridge();
+        calls.push(bridge);
+        bridge.onservicecallback = function (message) {
+          var res = null;
+          try { res = JSON.parse(message); } catch (e) {}
+          finish(res && res.returnValue !== false && res.wifi && res.wifi.state === 'connected');
+        };
+        bridge.call('luna://com.palm.connectionmanager/getStatus', '{}');
+      } catch (e) { finish(false); }
+    } else if (samsung) {
+      try {
+        window.tizen.systeminfo.getPropertyValue('WIFI_NETWORK', function (wifi) {
+          finish(wifi.status === 'ON' && ((wifi.ipAddress && wifi.ipAddress !== '0.0.0.0')
+              || (wifi.ip6Address && wifi.ip6Address !== '::')));
+        }, function () { finish(false); });
+      } catch (e) { finish(false); }
+    } else {
+      var connection = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+      finish(navigator.onLine !== false && connection && connection.type === 'wifi');
+    }
+  }
+
   /** done({model, firmware, system, version, ip}), with '' for what the TV doesn't tell. */
   function about(done) {
     var out = {model: '', firmware: '', system: '', version: '', ip: ''}, left = 1, sent = false;
@@ -423,6 +462,7 @@ var TV = (function () {
 
   return {
     name: webos ? 'webos' : samsung ? 'tizen' : 'browser',
+    networkStatus: networkStatus,
 
     /**
      * Whether an app can open the TV's settings. Not on Tizen 2 (a 2016 KU6300): the "settings" request and
