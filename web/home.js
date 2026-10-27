@@ -386,6 +386,28 @@
 
   var TAB_KIND = [null, 'movie', 'tv'];
   var networkState = {wifi: false, vpn: false}, networkPending = false;
+  var topButtons = [];
+
+  function topCandidates() {
+    var items = [
+      {id: 'wifi', title: 'Wi-Fi', symbol: 'wifi', indicator: true},
+      {id: 'vpn', title: 'VPN', symbol: 'vpn', indicator: true},
+      {id: 'live', title: tr('light|Live TV'), symbol: 'live_tv'},
+      {id: 'inputs', title: tr('HDMI Inputs'), symbol: 'hdmi'},
+      {id: 'settings', title: tr('light|Settings'), symbol: 'settings'}
+    ];
+    if (TV.canOpenSettings) items.push({id: 'tv-settings', title: tr('TV Settings'), symbol: 'tv_settings'});
+    return items;
+  }
+
+  function topKeys() {
+    var chosen = Prefs.topButtons() || ['wifi', 'vpn', 'live', 'inputs', 'settings'];
+    var available = topCandidates().map(function (item) { return item.id; }), out = [];
+    for (var i = 0; i < chosen.length; i++) {
+      if (available.indexOf(chosen[i]) >= 0 && out.indexOf(chosen[i]) < 0) out.push(chosen[i]);
+    }
+    return out;
+  }
 
   function updateNetworkStatus() {
     if (document.hidden || networkPending) return;
@@ -402,7 +424,17 @@
     $('title').textContent = tr('For You');
     var indicators = $('network-status');
     indicators.innerHTML = '';
-    var networks = ['wifi', 'vpn'];
+    var keys = topKeys(), candidates = topCandidates(), networks = [];
+    topButtons = [];
+    for (var p = 0; p < keys.length; p++) {
+      for (var c = 0; c < candidates.length; c++) {
+        var item = candidates[c];
+        if (item.id !== keys[p]) continue;
+        if (item.indicator) networks.push(item.id);
+        else topButtons.push(item);
+      }
+    }
+    $('title').style.left = (76 + 88 * networks.length) + 'px';
     for (var n = 0; n < networks.length; n++) {
       var name = networks[n];
       var indicator = el('div', 'round network-indicator' + (networkState[name] ? ' active' : ''), indicators);
@@ -419,13 +451,16 @@
     }
     var buttons = $('buttons');
     buttons.innerHTML = '';
-    var defs = [['live_tv', tr('light|Live TV')], ['hdmi', tr('HDMI Inputs')], ['settings', tr('light|Settings')]];
-    for (var b = 0; b < 3; b++) {
-      var r = el('button', 'round' + (b === 2 ? ' last' : ''), buttons);
-      r.style.left = (1596 + 88 * b) + 'px';
-      sym(defs[b][0], r);
-      el('div', 'tip', r, defs[b][1]);
+    for (var b = 0; b < topButtons.length; b++) {
+      var r = el('button', 'round' + (b === topButtons.length - 1 ? ' last' : ''), buttons);
+      r.style.left = (1840 - 68 - 88 * (topButtons.length - 1 - b)) + 'px';
+      sym(topButtons[b].symbol, r);
+      el('div', 'tip', r, topButtons[b].title);
       hover(r, Z.TOP, 3 + b);
+    }
+    if (st.zone === Z.TOP) {
+      if (!topButtons.length && !Data.hasKey()) st.zone = Z.SHELF;
+      else st.top = Math.min(st.top, 2 + topButtons.length);
     }
   }
 
@@ -803,6 +838,7 @@
       }
     }
     rows.push({label: tr('Shelf'), value: '›', shelf: true, step: function (d) { if (d >= 0) openShelfEdit(); }});
+    rows.push({label: tr('Top Buttons'), value: '›', top: true, step: function (d) { if (d >= 0) openShelfEdit(true); }});
     rows.push({label: tr('About this TV'), value: '›', about: true, step: function (d) { if (d >= 0) openAbout(); }});
     if (TV.canOpenSettings) rows.push({label: tr('TV Settings'), value: '›', step: function (d) { if (d >= 0) tvSettings(); }});
     return rows;
@@ -1187,9 +1223,12 @@
 
   // MARK: - Shelf editor: which apps, in what order
 
+  var editingTop = false;
+
   function editList() {
-    var ids = shelf.map(function (a) { return a.id; });
-    return {ids: ids, rows: [shelfApps()].concat(apps).sort(function (a, b) {
+    var ids = editingTop ? topKeys() : shelf.map(function (a) { return a.id; });
+    var candidates = editingTop ? topCandidates() : [shelfApps()].concat(apps);
+    return {ids: ids, rows: candidates.sort(function (a, b) {
       var ia = ids.indexOf(a.id), ib = ids.indexOf(b.id);
       if (ia >= 0 || ib >= 0) return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib);
       return a.title.toLowerCase() < b.title.toLowerCase() ? -1 : 1;
@@ -1200,8 +1239,8 @@
     var box = $('shelfedit').firstChild, e = editList();
     box.innerHTML = '';
     var title = el('div', 'title', box);
-    sym('apps', title);
-    title.appendChild(document.createTextNode(tr('Shelf')));
+    sym(editingTop ? 'settings' : 'apps', title);
+    title.appendChild(document.createTextNode(editingTop ? tr('Top Buttons') : tr('Shelf')));
     var list = el('div', 'list', box), holder = el('div', 'rows', list);
     list.style.height = Math.min(e.rows.length, 7) * 78 + 'px';
     for (var i = 0; i < e.rows.length; i++) {
@@ -1210,11 +1249,13 @@
       if (at >= 0) sym('check', place).style.marginLeft = '16px';   // on the shelf: a check, as in the pickers
       hover(row, Z.EDIT, i);
     }
-    el('div', 'hint', box, tr('OK adds or removes an app. ← → change the order.'));
+    el('div', 'hint', box, editingTop ? tr('OK adds or removes a button. ← → change the order.')
+        : tr('OK adds or removes an app. ← → change the order.'));
     updateFocus();
   }
 
-  function openShelfEdit() {
+  function openShelfEdit(top) {
+    editingTop = !!top;
     setClass($('settings'), 'open', false);
     st.zone = Z.EDIT;
     st.edit = 0;
@@ -1236,9 +1277,14 @@
       ids.splice(at, 1);
       ids.splice(to, 0, app.id);
     }
-    Prefs.set('shelf', ids);
-    pickShelf();
-    renderShelf();
+    if (editingTop) {
+      Prefs.set('topButtons', ids);
+      renderTop();
+    } else {
+      Prefs.set('shelf', ids);
+      pickShelf();
+      renderShelf();
+    }
     var again = editList();
     for (var i = 0; i < again.rows.length; i++) if (again.rows[i].id === app.id) st.edit = i;
     renderShelfEdit();
@@ -1270,8 +1316,11 @@
     switch (st.zone) {
       case Z.TOP:
         if (st.top < 3) return;
-        if (st.top === 3) { var live = liveTV(); if (live) launcher(live.id, tr('Live TV'))(); }
-        else if (st.top === 4) { st.zone = Z.SHELF; openDrawer(); st.drawer = 1 < drawerInputs ? 1 : 0; updateFocus(); }
+        var button = topButtons[st.top - 3];
+        if (!button) return;
+        if (button.id === 'live') { var live = liveTV(); if (live) launcher(live.id, tr('Live TV'))(); }
+        else if (button.id === 'inputs') { st.zone = Z.SHELF; openDrawer(); st.drawer = 1 < drawerInputs ? 1 : 0; updateFocus(); }
+        else if (button.id === 'tv-settings') tvSettings();
         else openSettings();
         return;
       case Z.CARDS:
@@ -1322,7 +1371,7 @@
         else if (dy > 0) { openDrawer(); return; }
         else if (dy < 0) {
           if (cards.length) { st.zone = Z.CARDS; st.card = nearest(cardNodes, centerX(tiles[st.shelf])); }
-          else { st.zone = Z.TOP; st.top = Data.hasKey() ? st.tab : 3; }
+          else if (Data.hasKey() || topButtons.length) { st.zone = Z.TOP; st.top = Data.hasKey() ? st.tab : 3; }
         }
         break;
       case Z.CARDS:
@@ -1332,7 +1381,7 @@
         break;
       case Z.TOP:
         if (dx) {
-          st.top = Math.max(Data.hasKey() ? 0 : 3, Math.min(5, st.top + dx));   // without the picks the tabs can't hold focus
+          st.top = Math.max(Data.hasKey() ? 0 : 3, Math.min(2 + topButtons.length, st.top + dx));   // without the picks the tabs can't hold focus
           if (st.top < 3) selectTab(st.top);   // as on Apple TV: focusing a tab selects it
         } else if (dy > 0) {
           if (cards.length) { st.zone = Z.CARDS; st.card = Math.min(cards.length - 1, st.top < 3 ? 0 : cards.length - 1); }
@@ -1355,7 +1404,7 @@
         }
         break;
       case Z.EDIT:
-        if (dy) st.edit = Math.max(0, Math.min(apps.length - 1, st.edit + dy));
+        if (dy) st.edit = Math.max(0, Math.min(editList().rows.length - 1, st.edit + dy));
         else if (dx) editShelf(dx);
         break;
       case Z.LANG:
@@ -1375,7 +1424,7 @@
     if (st.zone === Z.EDIT) {
       setClass($('shelfedit'), 'open', false);
       openSettings();
-      for (var i = 0; i < rowsNow.length; i++) if (rowsNow[i].shelf) st.row = i;   // back on the Shelf row, whatever follows it
+      for (var i = 0; i < rowsNow.length; i++) if (editingTop ? rowsNow[i].top : rowsNow[i].shelf) st.row = i;
       updateFocus();
       return;
     }

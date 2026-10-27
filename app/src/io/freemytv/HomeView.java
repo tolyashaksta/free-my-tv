@@ -156,6 +156,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private final Spring cardScroll = new Spring(0.32f, 0.78f, 0);
     private final RectF[] cardRects = new RectF[Recs.MAX_CARDS];
     private final List<HomeApps.Item> lightButtons = new ArrayList<>();
+    private final List<HomeApps.Item> lightIndicators = new ArrayList<>();
     private Paint lTitle, lTab, lTabOn, lCardTitle, lCardMeta, lQuote, lTip, lDate, lClock, lWeather, lClockQuote;
     private Shader lightGradient;
 
@@ -529,10 +530,14 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         motionDirty = true;
     }
 
-    /** The round buttons at the top right (Settings > Top Buttons), with their names in the current language. */
+    /** Configured buttons at the right and read-only indicators at the left (Settings > Top Buttons). */
     private void setLightButtons(List<HomeApps.Item> list) {
         lightButtons.clear();
-        lightButtons.addAll(list);
+        lightIndicators.clear();
+        for (HomeApps.Item item : list) {
+            if (item.kind == HomeApps.INDICATOR) lightIndicators.add(item);
+            else lightButtons.add(item);
+        }
         if (zone == Z_TOP && topIndex >= 3 + lightButtons.size()) {
             topIndex = 2 + lightButtons.size();
             if (topIndex < 3 && !picksOn()) zone = Z_SHELF;   // without the picks the tabs can't hold focus
@@ -3113,7 +3118,8 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             return;
         }
         String hello = Ui.tr("For You");
-        c.drawText(hello, (MARGIN + 2 * (L_BUTTON + L_BUTTON_GAP)) * k - Ui.leftBearing(lTitle, hello), L_TITLE_BASE * k, lTitle);
+        c.drawText(hello, (MARGIN + lightIndicators.size() * (L_BUTTON + L_BUTTON_GAP)) * k - Ui.leftBearing(lTitle, hello),
+                L_TITLE_BASE * k, lTitle);
         // Text tabs (the selected one in bold, in the main text color); with focus on the tabs, the selected one gets
         // the white pill with a shadow and grows a little (the tvOS focus).
         float focus = Ui.clamp(topFocus[tab].value);
@@ -3256,8 +3262,10 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
      */
     private void drawLightButtons(Canvas c) {
         applyTone();
-        drawNetworkIndicator(c, "wifi", 0, wifiConnected);
-        drawNetworkIndicator(c, "vpn", 1, vpnConnected);
+        for (int i = 0; i < lightIndicators.size(); i++) {
+            HomeApps.Item item = lightIndicators.get(i);
+            drawNetworkIndicator(c, item.symbol, i, HomeApps.TOP_WIFI.equals(item.key) ? wifiConnected : vpnConnected);
+        }
         for (int i = 0; i < lightButtons.size(); i++) {
             HomeApps.Item it = lightButtons.get(i);
             RectF r = topRects[3 + i];

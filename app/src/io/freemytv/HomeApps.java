@@ -60,6 +60,8 @@ final class HomeApps {
     static final int APP = 0, LIVE_TV = 1, INPUT = 2, ALL_APPS = 3, SETTINGS = 4, ANDROID_SETTINGS = 5, DEVICE = 6;
     /** The "HDMI Inputs" button: opens the bottom drawer on the inputs (the home screen handles it). */
     static final int INPUTS = 7;
+    /** Read-only connection icons at the top left. */
+    static final int INDICATOR = 8;
     /** Image size of each card (16:9; on screen it shows up to ~330 px wide). */
     static final int TILE_W = 384, TILE_H = 216;
 
@@ -275,15 +277,17 @@ final class HomeApps {
         return out;
     }
 
-    // MARK: - Top buttons (the round ones at the top right)
+    // MARK: - Top buttons and connection indicators
 
     static final String TOP_LIVE = "live", TOP_INPUTS = "inputs", TOP_SETTINGS = "settings", TOP_TV_SETTINGS = "tv-settings";
-    static final List<String> TOP_DEFAULT = Collections.unmodifiableList(java.util.Arrays.asList(TOP_LIVE, TOP_INPUTS, TOP_SETTINGS));
+    static final String TOP_WIFI = "wifi", TOP_VPN = "vpn";
+    static final List<String> TOP_DEFAULT = Collections.unmodifiableList(java.util.Arrays.asList(
+            TOP_WIFI, TOP_VPN, TOP_LIVE, TOP_INPUTS, TOP_SETTINGS));
     private static final List<String> TOP_AVAILABLE = Collections.unmodifiableList(java.util.Arrays.asList(
-            TOP_LIVE, TOP_INPUTS, TOP_SETTINGS, TOP_TV_SETTINGS));
+            TOP_WIFI, TOP_VPN, TOP_LIVE, TOP_INPUTS, TOP_SETTINGS, TOP_TV_SETTINGS));
     static final int MAX_TOP = TOP_AVAILABLE.size();
 
-    /** The keys of the top buttons, in order (Settings > Top Buttons; by default Live TV, HDMI Inputs, Settings). */
+    /** Selected items, in order within each corner (Settings > Top Buttons). */
     static List<String> topButtonKeys() {
         List<String> saved = Prefs.topButtons();
         if (saved == null) return TOP_DEFAULT;
@@ -301,6 +305,8 @@ final class HomeApps {
 
     private static Item topButton(String key) {
         switch (key) {
+            case TOP_WIFI: return action(INDICATOR, TOP_WIFI, "Wi-Fi", "wifi");
+            case TOP_VPN: return action(INDICATOR, TOP_VPN, "VPN", "vpn");
             case TOP_LIVE: return action(LIVE_TV, TOP_LIVE, Ui.tr("light|Live TV"), "live_tv");
             case TOP_INPUTS: return action(INPUTS, TOP_INPUTS, Ui.tr("HDMI Inputs"), "hdmi");
             case TOP_TV_SETTINGS: return tvSettings();

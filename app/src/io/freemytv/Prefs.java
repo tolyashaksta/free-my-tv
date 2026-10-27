@@ -281,7 +281,7 @@ final class Prefs {
     // MARK: - Top buttons
 
     /**
-     * The round buttons at the top right, in order: "live", "inputs", "settings" and/or "tv-settings". null until the
+     * Top buttons and indicators, in order within each corner. null until the
      * user edits them (then HomeApps.TOP_DEFAULT applies); empty when they took all buttons off.
      */
     static List<String> topButtons() {
@@ -289,13 +289,19 @@ final class Prefs {
         if (v == null) return null;
         List<String> out = new ArrayList<>();
         for (String p : v.split(",")) if (!p.isEmpty()) out.add(p);
+        // They were always shown before they joined this editor. Keep them on for existing button choices.
+        if (!sp().getBoolean("topStatusEdited", false)) {
+            if (!out.contains(HomeApps.TOP_VPN)) out.add(0, HomeApps.TOP_VPN);
+            if (!out.contains(HomeApps.TOP_WIFI)) out.add(0, HomeApps.TOP_WIFI);
+        }
         return out;
     }
 
     static void setTopButtons(List<String> keys) {
         StringBuilder sb = new StringBuilder();
         for (String p : keys) sb.append(sb.length() == 0 ? "" : ",").append(p);
-        put("topButtons", sb.toString());
+        sp().edit().putString("topButtons", sb.toString()).putBoolean("topStatusEdited", true).apply();
+        version++;
     }
 
     // MARK: - Remote buttons
