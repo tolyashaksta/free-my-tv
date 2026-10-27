@@ -99,6 +99,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private static final float L_PLATTER_TOP = 814, L_TILE_H = 126;
     private static final float L_DATE_BASE = 330, L_CLOCK_BASE = 540, L_WEATHER_BASE = 626, L_QUOTES_BASE = 694;
     private static final int L_INK = 0xFF1D1D1F, L_DIM = 0xFF6E6E73, L_FAINT = 0xFF8E8E93;
+    private static final int NETWORK_ON = 0xEBFFFFFF, NETWORK_OFF = 0xFF5C5C62;
     private static String[] tabs;
     private static int tabsGeneration = -1;
     private static final String[] TAB_KIND = {null, "movie", "tv"};
@@ -3311,7 +3312,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         shadows.draw(c, tmp, rad, SHADOW_BLUR * k, shadow);
         // Smoked glass keeps the white connection state legible in the day look too.
         scene.liquid(c, cell, rad, SMOKE, 0.5f, 0.01f, 12 * k, 8 * k, 0.45f, 1);
-        Symbols.draw(getContext(), c, symbol, cx, cy, 27 * k, connected ? 0xEBFFFFFF : L_FAINT);
+        Symbols.draw(getContext(), c, symbol, cx, cy, 27 * k, connected ? NETWORK_ON : NETWORK_OFF);
     }
 
     private boolean moveLight(int dx, int dy) {

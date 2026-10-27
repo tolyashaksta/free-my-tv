@@ -200,7 +200,7 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
   pointer-events: none;
   background: -webkit-linear-gradient(top, rgba(40, 40, 44, 0.8), rgba(17, 17, 19, 0.62));
   background: linear-gradient(rgba(40, 40, 44, 0.8), rgba(17, 17, 19, 0.62));
-  color: #8E8E93;
+  color: #5C5C62;
 }
 .round.network-indicator.active, .night .round.network-indicator.active { color: rgba(255, 255, 255, 0.92); }
 
