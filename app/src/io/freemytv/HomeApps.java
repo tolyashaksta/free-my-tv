@@ -241,20 +241,22 @@ final class HomeApps {
 
     // MARK: - Top buttons (the round ones at the top right)
 
-    static final String TOP_LIVE = "live", TOP_INPUTS = "inputs", TOP_SETTINGS = "settings";
+    static final String TOP_LIVE = "live", TOP_INPUTS = "inputs", TOP_SETTINGS = "settings", TOP_TV_SETTINGS = "tv-settings";
     static final List<String> TOP_DEFAULT = Collections.unmodifiableList(java.util.Arrays.asList(TOP_LIVE, TOP_INPUTS, TOP_SETTINGS));
-    static final int MAX_TOP = TOP_DEFAULT.size();
+    private static final List<String> TOP_AVAILABLE = Collections.unmodifiableList(java.util.Arrays.asList(
+            TOP_LIVE, TOP_INPUTS, TOP_SETTINGS, TOP_TV_SETTINGS));
+    static final int MAX_TOP = TOP_AVAILABLE.size();
 
     /** The keys of the top buttons, in order (Settings > Top Buttons; by default Live TV, HDMI Inputs, Settings). */
     static List<String> topButtonKeys() {
         List<String> saved = Prefs.topButtons();
         if (saved == null) return TOP_DEFAULT;
         List<String> keys = new ArrayList<>();
-        for (String key : saved) if (TOP_DEFAULT.contains(key) && !keys.contains(key)) keys.add(key);
+        for (String key : saved) if (TOP_AVAILABLE.contains(key) && !keys.contains(key)) keys.add(key);
         return keys;
     }
 
-    /** The top buttons, ready to draw (0 to 3 of them). */
+    /** The top buttons, ready to draw. */
     static List<Item> topButtons() {
         List<Item> items = new ArrayList<>();
         for (String key : topButtonKeys()) items.add(topButton(key));
@@ -265,6 +267,7 @@ final class HomeApps {
         switch (key) {
             case TOP_LIVE: return action(LIVE_TV, TOP_LIVE, Ui.tr("light|Live TV"), "live_tv");
             case TOP_INPUTS: return action(INPUTS, TOP_INPUTS, Ui.tr("HDMI Inputs"), "hdmi");
+            case TOP_TV_SETTINGS: return tvSettings();
             default: return action(SETTINGS, TOP_SETTINGS, Ui.tr("light|Settings"), "settings");
         }
     }
@@ -272,7 +275,7 @@ final class HomeApps {
     /** What can go in the top buttons, as {key, name}. */
     static List<String[]> topCandidates() {
         List<String[]> out = new ArrayList<>();
-        for (String key : TOP_DEFAULT) out.add(new String[] {key, topButton(key).label});
+        for (String key : TOP_AVAILABLE) out.add(new String[] {key, topButton(key).label});
         return out;
     }
 
@@ -304,7 +307,7 @@ final class HomeApps {
     /** Free My TV settings, in the corner of the home screen. */
     /** The TV's own settings (android.settings.SETTINGS). */
     static Item tvSettings() {
-        return shortcut(ANDROID_SETTINGS, "tv-settings", Ui.tr("TV Settings"), "tv_settings");
+        return shortcut(ANDROID_SETTINGS, TOP_TV_SETTINGS, Ui.tr("TV Settings"), "tv_settings");
     }
 
     static Item settings() {

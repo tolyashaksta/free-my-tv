@@ -1570,7 +1570,7 @@ public class SettingsActivity extends Activity {
         private void toggleShelfApp() {
             String pkg = shelfRows.get(pickScroll + focus)[0];
             if (shelfOrder.contains(pkg)) shelfOrder.remove(pkg);
-            else if (editingTop || shelfOrder.size() < HomeApps.maxShelf(getContext())) shelfOrder.add(pkg);   // three buttons: no limit to reach
+            else if (editingTop || shelfOrder.size() < HomeApps.maxShelf(getContext())) shelfOrder.add(pkg);   // top buttons have no shelf limit
             else return;
             refreshShelfRows(pkg);
         }
