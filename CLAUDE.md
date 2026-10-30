@@ -1,5 +1,23 @@
 # Free My TV: notes for Claude
 
+## This fork's workflow
+
+This checkout is the owner's customized fork, `tolyashaksta/free-my-tv` (`origin`). Work on `main`, tracking
+`origin/main`; it holds both the imported upstream history and all personal changes. Do not recreate `personal`
+or maintain another branch as an untouched upstream base. Read the private, git-ignored `LOCAL_SETUP.md` when
+present for local build and TV details.
+
+`upstream` points to `simbasjungles/free-my-tv`. Only import changes after the owner announces a new published
+release and asks to update. Verify the release's tag, fetch that exact tag (`git fetch upstream tag <release-tag>`),
+then merge the tag into `main`, preserving the owner's customizations and running the checks below before pushing
+to `origin/main`. Never use `upstream/main` as the update target. Do not fetch upstream as part of routine work,
+poll for releases, or set up automatic upstream synchronization. Existing imported commits stay in history.
+
+The release publishing and signing notes below describe the original project; this fork keeps its own local
+signing key. A source update does not authorize installing an APK or changing the TV.
+
+## Project overview
+
 A home screen for Google TV and Android TV that replaces the stock one, plus a settings app that switches between
 Free My TV and the TV's original home screen. A plain Android app in Java, built without Gradle by `build.sh`.
 LG TVs (webOS) and Samsung TVs (Tizen) get the same home screen as a web app: `web/`, packed by `webos/` and `tizen/`
