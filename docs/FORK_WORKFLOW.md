@@ -64,5 +64,11 @@ Use HTTPS for `origin` if SSH authentication is unavailable. Never force-push an
 
 Recovered source at `690f7ed` from the fork and merged published upstream `v1.4.0` (`d400001`). The former imported
 upstream baseline was `7235308`, so some items in the full 1.4 release notes already existed in this fork.
-The original private configuration, signing key and TV notes were absent from this checkout; tools and workflow
-documentation can be recreated, but those private files require the owner's backup.
+The original private configuration, signing key and TV notes were initially absent from this checkout. Later on
+2026-11-10 they were recovered from the Windows Recycle Bin, along with old local helpers and verification records
+(archived under `.local/recovered/`). These files remain excluded from Git and still need a private backup outside
+the checkout.
+
+The customized 1.4 APK was then built using the recovered original signing key and installed over 1.3 without
+uninstalling. The installed APK's SHA-256 matched the build, and the home activity and screensaver remained selected.
+The private installation record is `.local/installed-build.json`; the previous APK is `.local/tv-before-update.apk`.
