@@ -52,11 +52,17 @@ git merge --no-commit --no-ff v1.4.0
 # Resolve conflicts, run ./tools/local.ps1, then commit and push main.
 ```
 
-Replace the example tag with the requested release. Preserve the fork's TV Settings top button, configurable
-All Apps shelf shortcut, and configurable Wi-Fi/VPN indicators (dimmed and crossed out when disconnected).
-These coexist with 1.4's Recent Apps, App Store and draggable top buttons. Read-only indicators stay outside the
-focusable buttons; reordering buttons preserves their saved choices. Upstream status icons avoid a duplicate Wi-Fi
-icon when the fork's Wi-Fi indicator is selected.
+Replace the example tag with the requested release. Preserve the fork's TV Settings top button and configurable
+All Apps shelf shortcut. These coexist with 1.4's Recent Apps, App Store and draggable top buttons.
+
+The old round Wi-Fi/VPN indicators were deliberately removed at the owner's request. On Android, use the upstream
+Status icons setting: Wi-Fi/Ethernet, VPN, Bluetooth audio and USB. VPN appears only while connected, in the same
+style as the other icons. A single network subscription within the upstream status lifecycle tracks the underlying
+connection and VPN together; turning the setting off or leaving Home stops it. Never restore the old separate
+NetworkStatus watcher, its glass circles or its Top Buttons entries. Saved legacy indicator keys are ignored while
+the real top buttons keep their order. Existing explicitly selected legacy indicators enable Status icons once;
+subsequent changes to the switch are preserved. LG/Samsung no longer draw the old custom indicators; the upstream
+status feature and VPN detection are Android-only.
 
 Use HTTPS for `origin` if SSH authentication is unavailable. Never force-push an update.
 

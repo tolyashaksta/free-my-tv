@@ -20,10 +20,10 @@ public final class VisibleOrderTest {
     }
 
     public static void main(String[] args) {
-        // Moving the new top buttons must keep the fork's read-only indicators and TV Settings choice.
-        order(list("wifi", "vpn", "live", "tv-settings", "store", "settings"),
+        // A missing store must not disturb the fork's TV Settings choice when moving buttons.
+        order(list("live", "tv-settings", "store", "settings"),
                 list("settings", "tv-settings", "live"),
-                list("wifi", "vpn", "settings", "tv-settings", "store", "live"));
+                list("settings", "tv-settings", "store", "live"));
         order(list("live", "store", "inputs", "settings"), list("settings", "live", "inputs"),
                 list("settings", "store", "live", "inputs"));
         order(list("store", "live", "inputs", "recents", "settings", "future"), list("settings", "inputs", "live"),

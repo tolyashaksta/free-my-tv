@@ -127,6 +127,7 @@ final class Prefs {
     static void init(Context c) {
         app = c.getApplicationContext();
         migrateKeys();   // before anything reads the button choices
+        migrateStatusIcons();
         Ui.applyLanguage();   // the language picked on the TV, now that it can be read
     }
 
@@ -281,6 +282,21 @@ final class Prefs {
     /** Wi-Fi/Ethernet, VPN, Bluetooth and USB icons at the top-left of the home screen. */
     static boolean statusIcons() { return sp().getBoolean("statusicons", false); }
     static void setStatusIcons(boolean on) { put("statusicons", on); }
+
+    /** Replace the fork's visible round indicators once; later choices of the status switch always win. */
+    private static void migrateStatusIcons() {
+        SharedPreferences prefs = sp();
+        if (prefs.getBoolean("unifiedStatusIcons", false)) return;
+        String top = prefs.getString("topButtons", "");
+        boolean legacy = prefs.contains("topStatusEdited");
+        boolean selected = false;
+        for (String key : top.split(",")) if (key.equals("wifi") || key.equals("vpn")) selected = true;
+        if (!legacy && !selected) return;
+        boolean visible = selected || (legacy && !prefs.getBoolean("topStatusEdited", false));
+        SharedPreferences.Editor edit = prefs.edit().putBoolean("unifiedStatusIcons", true);
+        if (visible) edit.putBoolean("statusicons", true);
+        edit.commit();
+    }
 
     // MARK: - City
 
