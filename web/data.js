@@ -71,12 +71,18 @@ var Prefs = (function () {
     weather: function () { return pick('weather', true); },
     /** OK on the screensaver opens the title it shows, in its app; any other key only closes it (off by default). */
     saverWatch: function () { return pick('saverWatch', false) === true; },
+    /** What the screensaver shows: 'photos' (the picks' photos, as it always has) or 'clock' (a clock and the weather). */
+    saver: function () { return pick('saver', 'photos') === 'clock' ? 'clock' : 'photos'; },
+    /** Dimming over the picture, for a dark room: 'off', 'low', 'medium', 'high' or 'auto' (medium at night). */
+    dim: function () { return pick('dim', 'off'); },
     /** The weather card's forecast: 'hours' (the next 6 hours) or 'days' (the next 5 days). */
     forecast: function () { return pick('forecast', 'hours') === 'days' ? 'days' : 'hours'; },
     quotes: function () { return pick('quotes', CONFIG.showCrypto !== false); },
     coin: function (i) { var c = pick('coins', null); return c ? c[i] !== false : true; },
     /** Picks per tab: 3 (as it was) up to 6. */
     cards: function () { var n = pick('cards', 3); return n < 3 ? 3 : n > 6 ? 6 : n; },
+    /** Cartoons and anime out of the picks (Home Settings), or config.properties' hide_animation. */
+    hideAnimation: function () { return pick('hideAnimation', CONFIG.hideAnimation === true) === true; },
     shelf: function () { return pick('shelf', null); },
     topButtons: function () { return pick('topButtons', null); },
     /** The shelf_apps of the build that last set the shelf, so a new one wins once over the TV's choice. */
@@ -96,6 +102,22 @@ var Prefs = (function () {
       var list = pick('servicesOff', []).filter(function (k) { return k !== key; });
       if (off) list.push(key);
       this.set('servicesOff', list);
+    },
+    openPicks: function () { return pick('openPicks', CONFIG.openPicksIn === 'nuvio' ? 'nuvio' : 'apps'); },
+    /** The input the first top button opens, picked on the TV (Home Settings > Live TV button): 'live' (Live TV)
+     * or 'hdmi1'..'hdmi4'. */
+    boxInput: function () {
+      var k = String(pick('boxInput', 'live')).toLowerCase();
+      return /^hdmi[1-4]$/.test(k) ? k : 'live';
+    },
+    /** The Live TV tile in the drawer's inputs (Home Settings > Live TV), on until turned off on a TV with no
+     * antenna; the first top button still opens it. */
+    liveInput: function () { return pick('liveInput', true) !== false; },
+    /** Home Settings > Clock: '24' or '12', or 'auto' for the language's own; config.properties' clock_format until
+     * it's picked on the TV. */
+    clockFormat: function () {
+      var c = String(pick('clockFormat', CONFIG.clockFormat));
+      return c === '24' || c === '12' ? c : 'auto';
     },
     set: function (name, value) { v[name] = value; save(); this.version++; },
     setCoin: function (i, on) {
@@ -154,8 +176,11 @@ var Data = (function () {
 
   function place() { return Prefs.latitude() + ',' + Prefs.longitude(); }
   // Both forecasts in one answer, the next 48 hours and today plus 5 days: Home Settings → Forecast switches without
-  // asking again, and offline too.
-  var QUERY = '&current=temperature_2m,weather_code,is_day&daily=temperature_2m_max,temperature_2m_min,sunrise,sunset,weather_code'
+  // asking again, and offline too. 14 steps of 15 minutes tell the card whether rain comes in the next two hours, even
+  // from a forecast 30 minutes old (where the time zone is off by half an hour, they start up to 45 minutes back).
+  var QUERY = '&current=temperature_2m,weather_code,is_day'
+      + '&daily=temperature_2m_max,temperature_2m_min,sunrise,sunset,weather_code,uv_index_max'
+      + '&minutely_15=precipitation,precipitation_probability&forecast_minutely_15=14'
       + '&hourly=temperature_2m,weather_code,is_day&timezone=auto&forecast_days=6&forecast_hours=48';
   var weather = null, weatherAt = 0, fetchingWeather = false;
   (function () {
@@ -177,8 +202,20 @@ var Data = (function () {
     var w = {
       temp: o.current.temperature_2m, code: o.current.weather_code, isDay: o.current.is_day !== 0,
       max: dl.temperature_2m_max[0], min: dl.temperature_2m_min[0],
+      uv: dl.uv_index_max ? dl.uv_index_max[0] : null,
       sunrise: localTime(dl.sunrise[0], off), sunset: localTime(dl.sunset[0], off), hours: [], days: []
     };
+    // The 15-minute steps, [start, rain]: a step counts as rain from a 50% chance or 0.2 mm of it. rainIn reads them at
+    // the moment the card is drawn, not when the forecast came.
+    var mr = o.minutely_15;
+    if (mr && mr.time) {
+      w.steps = [];
+      for (var k = 0; k < mr.time.length; k++) {
+        var pr = mr.precipitation_probability ? mr.precipitation_probability[k] || 0 : 0;
+        var mm = mr.precipitation ? mr.precipitation[k] || 0 : 0;
+        w.steps.push([localTime(mr.time[k], off), pr >= 50 || mm >= 0.2]);
+      }
+    }
     var hr = o.hourly;
     for (var i = 0; hr && i < hr.time.length && w.hours.length < 6; i++) {
       var at = localTime(hr.time[i], off);
@@ -196,6 +233,20 @@ var Data = (function () {
     return w;
   }
 
+  /**
+   * Rain in the next two hours at `now`: the minutes until it starts, 0 while the step we're in has it, -1 if no step up
+   * to two hours from now has any, null when the steps don't reach that far (an older forecast, offline).
+   */
+  function rainIn(now) {
+    var s = weather && weather.steps, STEP = 15 * 60000, end = now + 2 * 3600000;
+    if (!s || !s.length) return null;
+    for (var i = 0; i < s.length && s[i][0] < end; i++) {
+      if (s[i][0] + STEP <= now) continue;   // already over
+      if (s[i][1]) return Math.max(0, Math.round((s[i][0] - now) / 60000));
+    }
+    return s[s.length - 1][0] + STEP >= end ? -1 : null;
+  }
+
   function refreshWeather() {
     var now = Date.now();
     if (fetchingWeather || (now - weatherAt < 30 * 60000 && now >= weatherAt)) return;
@@ -208,6 +259,38 @@ var Data = (function () {
       weather = parseWeather(body);
       weatherAt = Date.now();
       store('weather', {place: at, body: body, at: weatherAt, query: QUERY});
+      changed();
+    });
+  }
+
+  // MARK: - Air quality
+
+  /**
+   * Open-Meteo's air-quality endpoint, apart from the forecast: its numbers change slowly, so it has its own half-hour
+   * cache and its own key, and a TV that can't reach it still shows the weather.
+   */
+  var AIR_QUERY = 'current=us_aqi,pm2_5&timezone=auto';
+  var air = null, airAt = 0, airTried = 0, fetchingAir = false;
+  (function () {
+    var a = stored('air');
+    if (a && a.place === place() && a.query === AIR_QUERY) { air = a.body; airAt = a.at; }
+  })();
+
+  function refreshAir() {
+    var now = Date.now();
+    // Only for the weather card; a host that didn't answer is asked again 5 minutes later, not at every 30-second tick.
+    if (!Prefs.weather() || fetchingAir || (now - airAt < 30 * 60000 && now >= airAt) || (now - airTried < 5 * 60000 && now >= airTried)) return;
+    airTried = now;
+    fetchingAir = true;
+    var at = place();
+    getMeteo('air-quality-api.open-meteo.com/v1/air-quality?latitude=' + Prefs.latitude() + '&longitude='
+        + Prefs.longitude() + '&' + AIR_QUERY, function (err, body) {
+      fetchingAir = false;
+      if (at !== place()) { refreshAir(); return; }   // another city was picked meanwhile
+      if (err || !body || !body.current) return;
+      air = {aqi: body.current.us_aqi, pm25: body.current.pm2_5, at: Date.now()};
+      airAt = air.at;
+      store('air', {place: at, body: air, at: airAt, query: AIR_QUERY});
       changed();
     });
   }
@@ -236,11 +319,19 @@ var Data = (function () {
 
   var COINS = ['BTC', 'ETH', 'SOL', 'USDT'];
   var CURRENCY = Place.currency;
+  /** A currency Binance lists no pairs in (COP, MXN...): the coins come in USDT and convert with USDT<currency>. */
+  var FX = 'USDT' + CURRENCY, inFx = false;
   var QUOTE = CURRENCY === 'USD' ? 'USDT' : CURRENCY;
   /** Binance refuses the whole request when it has no pairs in the currency (INR...): the prices go in dollars then. */
   function inDollars() {
     store('dollarsFor', CURRENCY);
     CURRENCY = 'USD';
+    QUOTE = 'USDT';
+    inFx = false;   // dollars, not USDT converted: no USDT<currency> in the request any more
+  }
+  /** No direct pairs: USDT first, dollars only when Binance lists no USDT<currency> pair either. */
+  function fromUsdt() {
+    inFx = true;
     QUOTE = 'USDT';
   }
   /** A pair with no trade for a day: Binance halted it and keeps answering with the frozen last price (AUD since 2026-10-06). */
@@ -251,59 +342,90 @@ var Data = (function () {
   if (stored('dollarsFor') === CURRENCY && CURRENCY !== 'USD') {
     CURRENCY = 'USD';
     QUOTE = 'USDT';
+  } else if (stored('fxFor') === CURRENCY && CURRENCY !== 'USD') {
+    fromUsdt();
   }
   var prices = [NaN, NaN, NaN, NaN], changes = [NaN, NaN, NaN, NaN], pricesAt = 0, fetchingPrices = false;
 
-  /** Indexes in COINS of the coins that are on (the dollar only in Brazilian reais, where Binance lists it). */
+  /** The dollar card shows the USDT rate when there is one to show (reais, or a currency converted from USDT). */
+  function dollarRow() {
+    return CURRENCY !== 'USD' && (CURRENCY === 'BRL' || inFx);
+  }
+
+  /** Indexes in COINS of the coins that are on (and the dollar where there's a rate for it). */
   function activeCoins() {
     var out = [];
     if (!Prefs.quotes()) return out;
-    for (var i = 0; i < COINS.length; i++) if (Prefs.coin(i) && (i < 3 || CURRENCY === 'BRL')) out.push(i);
+    for (var i = 0; i < COINS.length; i++) if (Prefs.coin(i) && (i < 3 || dollarRow())) out.push(i);
     return out;
   }
 
   function parsePrices(list) {
-    var found = 0;
+    var found = 0, fx = NaN, fxOpen = NaN, got = [false, false, false, false];
     for (var i = 0; list && i < list.length; i++) {
+      if (inFx && list[i].symbol === FX) {
+        fx = parseFloat(list[i].lastPrice);
+        fxOpen = parseFloat(list[i].openPrice);
+        continue;
+      }
       for (var k = 0; k < COINS.length; k++) {
         if (list[i].symbol !== COINS[k] + QUOTE) continue;
         found++;
         var last = parseFloat(list[i].lastPrice), open = parseFloat(list[i].openPrice);
         prices[k] = last;
         changes[k] = open > 0 ? (last - open) / open * 100 : NaN;
+        got[k] = true;
       }
+    }
+    if (inFx) {
+      if (!(fx > 0)) return 0;   // no rate in the answer: as for any answer without prices
+      for (var c = 0; c < 3; c++) if (got[c]) prices[c] *= fx;
+      prices[3] = fx;
+      changes[3] = fxOpen > 0 ? (fx - fxOpen) / fxOpen * 100 : NaN;
+      return found + 1;
     }
     return found;
   }
 
   (function () {
     var p = stored('prices');
-    if (p && p.quote === QUOTE && parsePrices(p.body)) pricesAt = p.at;
+    if (p && p.quote === (inFx ? FX : QUOTE) && parsePrices(p.body)) pricesAt = p.at;
   })();
 
   function refreshPrices() {
-    var coins = activeCoins(), now = Date.now();
+    var coins = activeCoins(), now = Date.now(), symbols = [];
     if (!coins.length || fetchingPrices || (now - pricesAt < 5 * 60000 && now >= pricesAt)) return;
     fetchingPrices = true;
-    var symbols = coins.map(function (i) { return '%22' + COINS[i] + QUOTE + '%22'; }).join(',');
-    var path = '/api/v3/ticker/24hr?type=MINI&symbols=%5B' + symbols + '%5D';
-    // Binance.com refuses the US (HTTP 451); Binance.US answers the same call in dollars.
-    var hosts = ['https://api.binance.com', 'https://api.binance.us'];
+    for (var i = 0; i < coins.length; i++) if (!(inFx && coins[i] === 3)) symbols.push('%22' + COINS[coins[i]] + QUOTE + '%22');
+    if (inFx) symbols.push('%22' + FX + '%22');
+    var path = '/api/v3/ticker/24hr?type=MINI&symbols=%5B' + symbols.join(',') + '%5D';
+    // Binance.com refuses the US (HTTP 451); Binance.US answers the same call in dollars. data-api.binance.vision is
+    // Binance's own address for public market data, with Binance.com's pairs on another domain and certificate chain:
+    // it answers where a network blocks or intercepts api.binance.com (#375). A refusal skips it.
+    var hosts = ['https://api.binance.com', 'https://data-api.binance.vision', 'https://api.binance.us'];
     (function next(h, refused) {
       get(hosts[h] + path, {}, function (err, body) {
-        // A pair Binance doesn't list (HTTP 400): the prices go in dollars. Binance.US has only dollar pairs: its 400
-        // counts only where Binance.com refuses the US (HTTP 451), not after a timeout or a 5xx there.
-        if (err && err.message === 'HTTP 400' && QUOTE !== 'USDT' && (h === 0 || refused)) { fetchingPrices = false; inDollars(); refreshPrices(); return; }
+        // A pair Binance doesn't list (HTTP 400): direct pairs, then USDT converted, then dollars, and no further: a
+        // 400 in dollars stops here. Binance.US has only dollar pairs: its 400 counts only where Binance.com refuses
+        // the US (HTTP 451), not after a timeout or a 5xx there.
+        if (err && err.message === 'HTTP 400' && (inFx || QUOTE !== 'USDT') && (h < 2 || refused)) {
+          fetchingPrices = false;
+          if (inFx) inDollars(); else fromUsdt();
+          refreshPrices();
+          return;
+        }
         // Halted: dollars for this run, not saved like the 400's (the market may open again).
-        if (!err && QUOTE !== 'USDT' && halted(body)) { fetchingPrices = false; CURRENCY = 'USD'; QUOTE = 'USDT'; refreshPrices(); return; }
+        if (!err && !inFx && QUOTE !== 'USDT' && halted(body)) { fetchingPrices = false; CURRENCY = 'USD'; QUOTE = 'USDT'; refreshPrices(); return; }
         if (err || !parsePrices(body)) {
-          if (h + 1 < hosts.length && !(err && err.message === 'HTTP 400')) next(h + 1, err && err.message === 'HTTP 451');
+          var refusal = !!err && err.message === 'HTTP 451';
+          if (h + 1 < hosts.length && !(err && err.message === 'HTTP 400')) next(refusal ? 2 : h + 1, refused || refusal);
           else fetchingPrices = false;
           return;
         }
         fetchingPrices = false;
         pricesAt = Date.now();
-        store('prices', {quote: QUOTE, body: body, at: pricesAt});
+        store('prices', {quote: inFx ? FX : QUOTE, body: body, at: pricesAt});
+        if (inFx) store('fxFor', CURRENCY);
         changed();
       });
     })(0);
@@ -393,7 +515,7 @@ var Data = (function () {
   }
 
   function sourceStamp() {
-    var s = KEY.length + ':' + KEY.slice(-6) + ':' + REGION + (CONFIG.hideAnimation ? ':no-animation' : '');
+    var s = KEY.length + ':' + KEY.slice(-6) + ':' + REGION + (Prefs.hideAnimation() ? ':no-animation' : '');
     for (var i = 0; i < SERVICES.length; i++) s += usable(SERVICES[i][1]) ? '1' : '0';
     return s;
   }
@@ -509,7 +631,7 @@ var Data = (function () {
     });
   }
 
-  /** TMDB's Animation genre (movies and shows: cartoons and anime), left out with hide_animation=true. */
+  /** TMDB's Animation genre (movies and shows: cartoons and anime), left out with Cartoons and anime off. */
   var ANIMATION = 16;
 
   function animated(o) {
@@ -519,7 +641,7 @@ var Data = (function () {
 
   function addPick(list, o, kind) {
     if (!o.backdrop_path) return;
-    if (CONFIG.hideAnimation && animated(o)) return;
+    if (Prefs.hideAnimation() && animated(o)) return;
     list.push({id: o.id, kind: kind, title: kind === 'movie' ? o.title : o.name, backdrop: o.backdrop_path, poster: o.poster_path || '', meta: '', app: null, detailed: false});
   }
 
@@ -552,7 +674,7 @@ var Data = (function () {
       if (!ids.length) { done(new Error("none of the TV's streaming apps are on TMDB (or switched on in Picks from)")); return; }
       var common = '&language=' + lang() + '&watch_region=' + REGION + '&with_watch_monetization_types=flatrate&include_adult=false'
           + '&sort_by=popularity.desc&with_watch_providers=' + encodeURIComponent(ids.join('|'))
-          + (CONFIG.hideAnimation ? '&without_genres=' + ANIMATION : '');
+          + (Prefs.hideAnimation() ? '&without_genres=' + ANIMATION : '');
       var hot = {movie: [], tv: []}, fresh = {movie: [], tv: []};
       each(['movie', 'tv'], function (kind, next) {
         tmdb('/trending/' + kind + '/week?language=' + lang(), function (e, r) {
@@ -644,12 +766,14 @@ var Data = (function () {
     appFor: appFor,
     usable: usable,
     services: services,
-    refresh: function () { refreshWeather(); refreshPrices(); refreshRecs(); },
+    refresh: function () { refreshWeather(); refreshAir(); refreshPrices(); refreshRecs(); },
     settingsChanged: function () { pricesAt = 0; refreshPrices(); changed(); },
     findCity: findCity,
     /** Another city picked: its weather now (none shown until it comes). */
-    cityChanged: function () { weather = null; weatherAt = 0; refreshWeather(); changed(); },
+    cityChanged: function () { weather = null; weatherAt = 0; air = null; airAt = 0; airTried = 0; refreshWeather(); refreshAir(); changed(); },
     get weather() { return weather; },
+    get air() { return air; },
+    rainIn: rainIn,
     get weatherAt() { return weatherAt; },
     prices: prices,
     changes: changes,

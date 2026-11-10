@@ -55,9 +55,14 @@
 
   var stage = $('stage'), body = document.body;
 
-  /** The 1920 × 1080 stage fills the window (on the TV it already is 1920 × 1080). */
+  /**
+   * The 1920 × 1080 stage fills the window (on the TV it already is 1920 × 1080). A TV's window only gets shorter for
+   * the keyboard (Samsung's resizes it while the city or key field has focus): there the stage keeps its width and the
+   * keyboard covers its bottom, as in other apps. Fitted to the short window, it shrank into the top left beside a white
+   * band (#399).
+   */
   function fit() {
-    var s = Math.min(window.innerWidth / 1920, window.innerHeight / 1080);
+    var s = TV.name !== 'browser' ? window.innerWidth / 1920 : Math.min(window.innerWidth / 1920, window.innerHeight / 1080);
     stage.style.webkitTransform = stage.style.transform = s === 1 ? '' : 'scale(' + s + ')';
   }
 
@@ -129,6 +134,59 @@
     return m ? [+m[1], +m[2], +m[3]] : [0, 0, 0];
   }
 
+  /**
+   * The background of an icon whose edges change smoothly instead of being one color (Disney+'s and SkyShowtime's
+   * gradients, Vodafone TV's vignette, Movistar Plus+'s grey to black on a 2019 Q70R): the colors along its four edges,
+   * a little inside, for a Coons patch between them (patch()). null when an edge is clear or jumps: a picture, not a
+   * background.
+   */
+  function ramp(px, w, h, inset) {
+    var N = 16, x0 = inset, x1 = w - 1 - inset, y0 = inset, y1 = h - 1 - inset;
+    if (x1 - x0 < N || y1 - y0 < N) return null;
+    var sum = [0, 0, 0];
+    function side(xa, ya, xb, yb) {   // N + 1 colors from (xa, ya) to (xb, yb)
+      var out = [], prev = null;
+      for (var s = 0; s <= N; s++) {
+        var i = (Math.round(ya + s / N * (yb - ya)) * w + Math.round(xa + s / N * (xb - xa))) * 4;
+        if (px[i + 3] < 250) return null;
+        var c = [px[i], px[i + 1], px[i + 2]];
+        if (prev && Math.max(Math.abs(c[0] - prev[0]), Math.abs(c[1] - prev[1]), Math.abs(c[2] - prev[2])) > 48) return null;
+        sum[0] += c[0]; sum[1] += c[1]; sum[2] += c[2];
+        out.push(prev = c);
+      }
+      return out;
+    }
+    var top = side(x0, y0, x1, y0), bottom = side(x0, y1, x1, y1), left = side(x0, y0, x0, y1), right = side(x1, y0, x1, y1);
+    if (!top || !bottom || !left || !right) return null;
+    // Each column's top and bottom colors, each row's left and right ones, and where it sits between the edges (0-1).
+    function spread(edge, n, a, b) {
+      var out = [], at = [];
+      for (var z = 0; z < n; z++) {
+        var t = Math.max(0, Math.min(1, (z - a) / (b - a))), f = t * N, s = Math.min(N - 1, Math.floor(f)), r = f - s;
+        for (var c = 0; c < 3; c++) out.push(edge[s][c] + (edge[s + 1][c] - edge[s][c]) * r);
+        at.push(t);
+      }
+      return {rgb: out, at: at};
+    }
+    var cols = spread(top, w, x0, x1), colsB = spread(bottom, w, x0, x1), rows = spread(left, h, y0, y1);
+    var corners = [];
+    for (var c = 0; c < 3; c++) {
+      corners.push((top[0][c] + left[0][c]) / 2, (top[N][c] + right[0][c]) / 2,
+        (bottom[0][c] + left[N][c]) / 2, (bottom[N][c] + right[N][c]) / 2);
+    }
+    var n = 4 * (N + 1);
+    return {t: cols.rgb, b: colsB.rgb, l: rows.rgb, r: spread(right, h, y0, y1).rgb, u: cols.at, v: rows.at,
+      corners: corners, mean: [Math.round(sum[0] / n), Math.round(sum[1] / n), Math.round(sum[2] / n)]};
+  }
+
+  /** Channel c of ramp()'s background at (x, y): the edges blended in, less the corners counted twice. */
+  function patch(g, x, y, c) {
+    var u = g.u[x], v = g.v[y], k = c * 4;
+    return (1 - v) * g.t[x * 3 + c] + v * g.b[x * 3 + c] + (1 - u) * g.l[y * 3 + c] + u * g.r[y * 3 + c] -
+      ((1 - u) * (1 - v) * g.corners[k] + u * (1 - v) * g.corners[k + 1] + (1 - u) * v * g.corners[k + 2] +
+        u * v * g.corners[k + 3]);
+  }
+
   function lift(img) {
     var w = img.naturalWidth, h = img.naturalHeight;
     if (!w || !h) return false;
@@ -158,6 +216,10 @@
       votes[key] = (votes[key] || 0) + 1;
       if (votes[key] > bestN) { bestN = votes[key]; best = key === 'clear' ? null : [px[i], px[i + 1], px[i + 2]]; }
     }
+    // Not one color all along the edge: a gradient or a vignette, taken away pixel by pixel when it's smooth. Against
+    // its near-black end, a pixel a few levels darker isn't ink (Movistar Plus+'s last rows, HBO Max's vignette).
+    var grad = bestN < 64 ? ramp(px, w, h, inset) : null, under = [0, 0, 0], dark = grad ? 64 : 1;
+    if (grad) best = grad.mean;
     var minX = w, minY = h, maxX = -1, maxY = -1, ink = [0, 0, 0, 0, 0, 0, 0, 0], inkSum = 0;
     for (var p = 0; p < w * h; p++) {
       var j = p * 4, a = px[j + 3] / 255;
@@ -166,12 +228,14 @@
         // anti-aliased edges come out as the logo's color, partly clear, without a fringe of the background
         var k = 0, c;
         for (c = 0; c < 3; c++) {
-          var v = px[j + c], o = best[c];
-          k = Math.max(k, v > o ? (v - o) / Math.max(1, 255 - o) : (o - v) / Math.max(1, o));
+          var v = px[j + c], o = under[c] = grad ? patch(grad, p % w, (p / w) | 0, c) : best[c];
+          k = Math.max(k, v > o ? (v - o) / Math.max(1, 255 - o) : (o - v) / Math.max(dark, o));
         }
         k = Math.max(0, Math.min(1, (k - 0.1) / 0.9));   // compression noise stays clear
+        // Outside the edges a gradient was read on, it keeps going (Disney+'s brightens in its last rows): background.
+        if (grad && (p % w < inset || p % w >= w - inset || p < inset * w || p >= (h - inset) * w)) k = 0;
         if (k > 0 && k < 1) {
-          for (c = 0; c < 3; c++) px[j + c] = Math.max(0, Math.min(255, best[c] + (px[j + c] - best[c]) / k));
+          for (c = 0; c < 3; c++) px[j + c] = Math.max(0, Math.min(255, under[c] + (px[j + c] - under[c]) / k));
         }
         a *= k;
       }
@@ -393,7 +457,7 @@
     var items = [
       {id: 'wifi', title: 'Wi-Fi', symbol: 'wifi', indicator: true},
       {id: 'vpn', title: 'VPN', symbol: 'vpn', indicator: true},
-      {id: 'live', title: tr('light|Live TV'), symbol: 'live_tv'},
+      {id: 'live', title: Prefs.boxInput() === 'live' ? tr('light|Live TV') : boxLabel(), symbol: Prefs.boxInput() === 'live' ? 'live_tv' : 'tv'},
       {id: 'inputs', title: tr('HDMI Inputs'), symbol: 'hdmi'},
       {id: 'settings', title: tr('light|Settings'), symbol: 'settings'}
     ];
@@ -650,6 +714,7 @@
     drawerItems = [];
     for (var i = 0; i < inputs.length; i++) {
       var x = inputs[i];
+      if (x.key === 'live' && !Prefs.liveInput()) continue;
       drawerItems.push({label: x.label || tr('Live TV'), symbol: x.symbol, off: !x.connected, run: launcher(x.id, x.label)});
     }
     drawerInputs = drawerItems.length;
@@ -711,6 +776,11 @@
     sym(Data.symbol(w.code, w.isDay), now);
     el('span', 'temp', now, Data.degrees(w.temp));
     el('div', 'cond', card, Data.condition(w.code, w.isDay));
+    var parts = weatherParts(w);
+    extraKey = parts.join(' · ');
+    if (parts.length) extraShown = fitExtra(el('div', 'extra', card, extraKey), parts);
+    else extraShown = '';
+    setClass(card, 'with-extra', !!extraShown);   // the card grows the line only when it has one: otherwise, main's
     el('div', 'range', card, trf('H:{max}', {max: Data.degrees(w.max)}) + '   ' + trf('L:{min}', {min: Data.degrees(w.min)}));
     el('div', 'split', card);
     // Home Settings → Forecast: the next 6 hours or the next 5 days (the hours until a forecast has days).
@@ -729,6 +799,42 @@
     if (w.sunrise) { var a = el('span', '', sun); sym('sunrise', a); a.appendChild(document.createTextNode(trf('Sunrise {time}', {time: Data.time(w.sunrise)}))); }
     if (w.sunset) { var b = el('span', '', sun); sym('sunset', b); b.appendChild(document.createTextNode(trf('Sunset {time}', {time: Data.time(w.sunset)}))); }
   }
+
+  var extraShown = '', extraKey = '';
+
+  /**
+   * The line under the condition, part by part: rain in the next two hours, the UV index by day, the air quality from
+   * moderate up. Empty when it has nothing to say (no rain coming, night, clean air): then the card is the one on main.
+   */
+  function weatherParts(w) {
+    var parts = [], rain = Data.rainIn(Date.now());
+    // 0: it rains now, which the line above says; -1: no rain in the two hours ahead; null: the forecast doesn't reach.
+    if (rain > 0) parts.push(trf('Rain in ~{time}', {time: trf('{n} min', {n: Math.max(5, Math.round(rain / 5) * 5)})}));
+    if (w.uv >= 3 && w.isDay) parts.push(trf('UV {n}', {n: Math.round(w.uv)}));   // the day's highest, so not at night
+    var air = Data.air;
+    // 51 is where the US AQI says moderate: good air is what a weather card needn't spell out.
+    if (air && air.aqi !== null && air.aqi !== undefined && air.aqi >= 51) parts.push(trf('AQI {n}', {n: Math.round(air.aqi)}));
+    return parts;
+  }
+
+  /** Never a cut at the edge: the line is set smaller first, and then its last part goes (the air quality, then the UV). */
+  function fitExtra(line, parts) {
+    var sizes = [21, 19];
+    for (var i = 0; i < sizes.length; i++) {
+      line.style.fontSize = sizes[i] + 'px';
+      if (line.scrollWidth <= line.clientWidth + 1) return line.textContent;
+    }
+    while (parts.length > 1 && line.scrollWidth > line.clientWidth + 1) {
+      parts.pop();
+      line.textContent = parts.join(' · ');
+    }
+    return line.textContent;
+  }
+
+  // "Rain in ~40 min" counts down between forecasts: the card is drawn again when its line would read otherwise.
+  setInterval(function () {
+    if (Prefs.weather() && Data.weather && weatherParts(Data.weather).join(' · ') !== extraKey) renderPanels();
+  }, 60000);
 
   function renderPrices(card, coins) {
     el('div', 'head', card, tr('Crypto'));
@@ -804,7 +910,7 @@
   // MARK: - Home Settings
 
   function settingRows() {
-    var unit = Prefs.temperature(), theme = Prefs.theme();
+    var unit = Prefs.temperature(), theme = Prefs.theme(), clock = Prefs.clockFormat();
     var auto = tr('Automatic'), picked = pickedLanguage();
     var rows = [
       {label: tr('Language'), value: picked === 'auto' ? auto : I18N.languageName(picked), opens: true, language: true,
@@ -813,8 +919,21 @@
         step: function (d) { cycle('temperature', ['auto', 'C', 'F'], unit, d); renderPanels(); }},
       {label: tr('Theme'), value: theme === 'light' ? tr('Light') : theme === 'dark' ? tr('Dark') : auto,
         step: function (d) { cycle('theme', ['auto', 'light', 'dark'], theme, d); checkNight(); }},
+      {label: tr('Clock'), value: clock === '24' ? tr('24 hours') : clock === '12' ? tr('12 hours') : auto,
+        step: function (d) {
+          cycle('clockFormat', ['auto', '24', '12'], clock, d);
+          I18N.setClock(Prefs.clockFormat());
+          renderClock();
+          renderPanels();
+        }},
+      {label: tr('Dim'), value: dimName(),
+        step: function (d) { cycle('dim', ['off', 'low', 'medium', 'high', 'auto'], Prefs.dim(), d); applyDim(); }},
+      {label: tr('Screensaver'), value: saverMode() === 'clock' ? tr('Clock') : tr('Photos'),
+        step: function (d) { cycle('saver', ['photos', 'clock'], saverMode(), d); }},
       {label: tr('Picks per tab'), value: String(Prefs.cards()),
         step: function (d) { Prefs.set('cards', 3 + (Prefs.cards() - 3 + (d || 1) + 4) % 4); renderCards(); }},
+      {label: tr('Cartoons and anime'), toggle: !Prefs.hideAnimation(),
+        step: function () { Prefs.set('hideAnimation', !Prefs.hideAnimation()); Data.refresh(); }},
       {label: tr('Watch from the screensaver'), toggle: Prefs.saverWatch(),
         step: function () { Prefs.set('saverWatch', !Prefs.saverWatch()); }},
       {label: tr('Weather widget'), toggle: Prefs.weather(),
@@ -849,6 +968,15 @@
         })(sv[j].key, sv[j].name);
       }
     }
+    if (nuvio()) {
+      var open = Prefs.openPicks();
+      rows.push({label: tr('Open picks in'), value: open === 'nuvio' ? 'Nuvio' : tr('Streaming apps'),
+        step: function (d) { cycle('openPicks', ['apps', 'nuvio'], open, d); }});
+    }
+    rows.push({label: tr('Live TV button'), value: boxLabel(),
+      step: function (d) { cycle('boxInput', ['live', 'hdmi1', 'hdmi2', 'hdmi3', 'hdmi4'], Prefs.boxInput(), d); renderTop(); }});
+    rows.push({label: tr('Live TV'), toggle: Prefs.liveInput(),
+      step: function () { Prefs.set('liveInput', !Prefs.liveInput()); renderDrawer(); }});
     rows.push({label: tr('Shelf'), value: '›', shelf: true, step: function (d) { if (d >= 0) openShelfEdit(); }});
     rows.push({label: tr('Top Buttons'), value: '›', top: true, step: function (d) { if (d >= 0) openShelfEdit(true); }});
     rows.push({label: tr('About this TV'), value: '›', about: true, step: function (d) { if (d >= 0) openAbout(); }});
@@ -1304,10 +1432,27 @@
 
   // MARK: - Opening things
 
-  function launcher(id, name) {
+  /** Nuvio, when the TV has it: picks can open on its page there (Home Settings, Open picks in). LG only for now:
+   *  Samsung's launch passes no data, so Nuvio would open on its Home. */
+  function nuvio() {
+    if (TV.name !== 'webos') return null;
+    for (var i = 0; i < apps.length; i++) if (/nuvio/i.test(apps[i].id) || /^nuvio\b/i.test(apps[i].title)) return apps[i];
+    return null;
+  }
+
+  function pickTarget(p) {
+    if (!p) return null;
+    var via = Prefs.openPicks() === 'nuvio' ? nuvio() : null;
+    var app = via || Data.appFor(p.app);
+    if (!app) return null;
+    // Nuvio's own link for the title, as on Android (nuvio://tmdb/movie/603); webOS apps get links as contentTarget.
+    return {app: app, params: via ? {contentTarget: 'nuvio://tmdb/' + (p.kind === 'tv' ? 'series' : 'movie') + '/' + p.id} : null};
+  }
+
+  function launcher(id, name, params) {
     return function () {
       if (id === ALL_APPS_ID) { openApps(); return; }
-      TV.launch(id, null, function (ok) {
+      TV.launch(id, params || null, function (ok) {
         if (!ok) toast(trf("Couldn't open {app}.", {app: name || id}));
       });
     };
@@ -1324,20 +1469,33 @@
     return null;
   }
 
+  /** The input the first top button opens, picked in Home Settings > Live TV button: Live TV or an HDMI port. */
+  function boxTV() {
+    var want = Prefs.boxInput();
+    for (var i = 0; i < inputs.length; i++) if (inputs[i].key === want) return inputs[i];
+    return liveTV();
+  }
+
+  /** Its name, for the button's tip and the settings row: the TV's own ("HDMI 2", or a name the person gave the input). */
+  function boxLabel() {
+    var box = boxTV();
+    return box && box !== liveTV() && box.label ? box.label : tr('Live TV');
+  }
+
   function activate() {
     switch (st.zone) {
       case Z.TOP:
         if (st.top < 3) return;
         var button = topButtons[st.top - 3];
         if (!button) return;
-        if (button.id === 'live') { var live = liveTV(); if (live) launcher(live.id, tr('Live TV'))(); }
+        if (button.id === 'live') { var box2 = boxTV(); if (box2) launcher(box2.id, boxLabel())(); }
         else if (button.id === 'inputs') { st.zone = Z.SHELF; openDrawer(); st.drawer = 1 < drawerInputs ? 1 : 0; updateFocus(); }
         else if (button.id === 'tv-settings') tvSettings();
         else openSettings();
         return;
       case Z.CARDS:
-        var p = cards[st.card], app = p && Data.appFor(p.app);
-        if (app) launcher(app.id, app.title)();
+        var target = pickTarget(cards[st.card]);
+        if (target) launcher(target.app.id, target.app.title, target.params)();
         return;
       case Z.SHELF:
         if (shelf[st.shelf]) launcher(shelf[st.shelf].id, shelf[st.shelf].title)();
@@ -1507,6 +1665,28 @@
 
   var saverOn = false, idleAt = Date.now(), saverIndex = 0, saverTimer = 0, saverPick = null, SAVER_AFTER = 5 * 60000;
 
+  /** "photos" (the picks' photos, as it always was) or "clock": what the screen shows when nobody touches it. */
+  function saverMode() { return Prefs.saver(); }
+
+  /** Dim, as the person picked it: off, low, medium, high, or automatic (medium from 22:00 to 07:00). */
+  function dimName() {
+    var v = Prefs.dim();
+    return v === 'low' ? tr('dim|Low') : v === 'medium' ? tr('dim|Medium') : v === 'high' ? tr('dim|High')
+      : v === 'auto' ? tr('Automatic') : tr('Off');
+  }
+
+  function dimLevel() {
+    var v = Prefs.dim();
+    if (v === 'auto') { var h = new Date().getHours(); return h >= 22 || h < 7 ? 2 : 0; }
+    return v === 'low' ? 1 : v === 'medium' ? 2 : v === 'high' ? 3 : 0;
+  }
+
+  /** The panel's brightness is a private API: this is a black layer over the picture instead. */
+  function applyDim() {
+    var level = dimLevel();
+    $('dim').className = 'layer' + (level ? ' d' + level : '');
+  }
+
   /** The screensaver's photos: picks with an app on the TV. */
   function saverPhotos() {
     return Data.showcase().filter(function (p) { return p.backdrop && Data.usable(p.app); });
@@ -1536,8 +1716,8 @@
         clock.children[2].textContent = p.title;
         saverPick = p;
         // With Watch from the screensaver on, OK opens this title's app (any other key only closes).
-        var app = Prefs.saverWatch() && Data.appFor(p.app);
-        hint.textContent = app ? trf('Press OK to watch on {app} · any other button to close', {app: app.title}) : '';
+        var target = Prefs.saverWatch() ? pickTarget(p) : null;
+        hint.textContent = target ? trf('Press OK to watch on {app} · any other button to close', {app: target.app.title}) : '';
         setTimeout(function () {
           setClass(back, 'on', true);
           setClass(front, 'on', false);
@@ -1564,12 +1744,53 @@
     setClass($('saver'), 'on', false);
   }
 
+  // MARK: - The clock screensaver: a clock, the date and the weather, drifting slowly for OLED panels
+
+  var ambientOn = false, ambientTimer = 0;
+
+  function showAmbient() {
+    if (ambientOn) return;
+    var a = $('ambient');
+    a.innerHTML = '';
+    var shift = el('div', 'shift', a);
+    el('div', 'clock', shift);
+    el('div', 'date', shift);
+    var side = el('div', 'side', shift);
+    el('div', 'temp', side);
+    el('div', 'cond', side);
+    ambientOn = true;
+    setClass(a, 'on', true);
+    ambientTimer = setInterval(tickAmbient, 30000);
+    tickAmbient();
+  }
+
+  function tickAmbient() {
+    if (!ambientOn) return;
+    var a = $('ambient'), d = new Date(), w = Prefs.weather() ? Data.weather : null;
+    a.querySelector('.clock').textContent = formatDate('format|h:mm', d.getTime());
+    a.querySelector('.date').textContent = formatDate('format|EEEE, MMMM d', d.getTime());
+    // The forecast as it is now (a new one comes every 30 minutes), and only with the weather card on, as on Android.
+    a.querySelector('.temp').textContent = w ? Data.degrees(w.temp) : '';
+    a.querySelector('.cond').textContent = w ? Data.condition(w.code, w.isDay) : '';
+    // A clock that never moves burns into an OLED: the drift of Android's clock without photos (40 × 26 px, 10 minutes).
+    var phase = 2 * Math.PI * (d.getTime() / 1000 % 600) / 600, shift = a.querySelector('.shift');
+    shift.style.webkitTransform = shift.style.transform =
+      'translate(' + Math.round(40 * Math.sin(phase)) + 'px,' + Math.round(26 * Math.sin(2 * phase + 0.7)) + 'px)';
+  }
+
+  function hideAmbient() {
+    ambientOn = false;
+    clearInterval(ambientTimer);
+    setClass($('ambient'), 'on', false);
+  }
+
   function poke(ok) {
     idleAt = Date.now();
+    if (ambientOn) { hideAmbient(); return true; }
     if (!saverOn) return false;
-    var app = ok && saverPick && Prefs.saverWatch() && Data.appFor(saverPick.app);
+    var target = ok && Prefs.saverWatch() ? pickTarget(saverPick) : null;
     hideSaver();
-    if (app) launcher(app.id, app.title)();
+    if (target) launcher(target.app.id, target.app.title, target.params)();
     return true;
   }
 
@@ -1641,6 +1862,7 @@
   /** Back to the home screen (the app was opened again): the shelf, everything closed, the first tab at its first pick. */
   function reset() {
     hideSaver();
+    hideAmbient();
     closeSheets();
     st.zone = Z.SHELF;
     st.shelf = 0;
@@ -1676,22 +1898,28 @@
   document.addEventListener('webOSRelaunch', reopened);   // LG: opened again while running
   window.addEventListener('appcontrol', reopened);        // Samsung: the same
   document.addEventListener('visibilitychange', function () {
-    if (document.hidden) { hideSaver(); return; }
+    // Going behind another app or coming back, the screensaver goes: coming back (Back from Netflix, say, which is no
+    // relaunch) shows the home screen, never a screensaver that started while the app was out of sight.
+    hideSaver();
+    hideAmbient();
+    if (document.hidden) return;
     idleAt = Date.now();
     updateNetworkStatus();
     loadApps(function () { renderShelf(); renderDrawer(); updateFocus(); Data.refresh(); });
   });
 
   I18N.set(Prefs.language());
+  I18N.setClock(Prefs.clockFormat());
   checkNight();   // now, from the last forecast: not after the TV lists its apps, with the day look until then
   // LG's screensaver waits only when ours will show: not under a sheet (ours waits there), and not without photos.
-  TV.holdScreenSaver(function () { return !sheetOpen() && saverPhotos().length > 0; });
+  TV.holdScreenSaver(function () { return !sheetOpen() && (saverMode() === 'clock' || saverPhotos().length > 0); });
   fit();
   renderTop();
   updateNetworkStatus();
   window.addEventListener('online', updateNetworkStatus);
   window.addEventListener('offline', updateNetworkStatus);
   setInterval(updateNetworkStatus, 15000);
+  applyDim();
   tickClock();
   loadApps(function () {
     renderAll();
@@ -1701,10 +1929,17 @@
   setInterval(function () {
     checkNight();
     Data.refresh();
-    if (!saverOn && !sheetOpen() && Date.now() - idleAt > SAVER_AFTER) showSaver();
+    applyDim();   // automatic: medium from 22:00, off again at 07:00
+    // Only on screen: behind another app nobody presses our keys, so idleAt grows old and the screensaver would start
+    // there, turning photos every 12 s for nothing while Netflix or YouTube plays.
+    if (!document.hidden && !saverOn && !ambientOn && !sheetOpen() && Date.now() - idleAt > SAVER_AFTER) {
+      if (saverMode() === 'clock') showAmbient(); else showSaver();
+    }
     if (saverOn) tickSaverClock($('saver').querySelector('.clock'));
+    if (ambientOn) tickAmbient();
   }, 30000);
 
   // For the browser preview and tests.
-  window.FreeMyTV = {state: st, move: move, activate: activate, back: back, showSaver: showSaver, hideSaver: hideSaver, toast: toast};
+  window.FreeMyTV = {state: st, move: move, activate: activate, back: back, showSaver: showSaver, hideSaver: hideSaver, toast: toast,
+    showAmbient: showAmbient, hideAmbient: hideAmbient, applyDim: applyDim};
 })();
