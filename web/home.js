@@ -450,13 +450,10 @@
   // MARK: - Top: title, tabs, buttons, quotes
 
   var TAB_KIND = [null, 'movie', 'tv'];
-  var networkState = {wifi: false, vpn: false}, networkPending = false;
   var topButtons = [];
 
   function topCandidates() {
     var items = [
-      {id: 'wifi', title: 'Wi-Fi', symbol: 'wifi', indicator: true},
-      {id: 'vpn', title: 'VPN', symbol: 'vpn', indicator: true},
       {id: 'live', title: Prefs.boxInput() === 'live' ? tr('light|Live TV') : boxLabel(), symbol: Prefs.boxInput() === 'live' ? 'live_tv' : 'tv'},
       {id: 'inputs', title: tr('HDMI Inputs'), symbol: 'hdmi'},
       {id: 'settings', title: tr('light|Settings'), symbol: 'settings'}
@@ -466,7 +463,7 @@
   }
 
   function topKeys() {
-    var chosen = Prefs.topButtons() || ['wifi', 'vpn', 'live', 'inputs', 'settings'];
+    var chosen = Prefs.topButtons() || ['live', 'inputs', 'settings'];
     var available = topCandidates().map(function (item) { return item.id; }), out = [];
     for (var i = 0; i < chosen.length; i++) {
       if (available.indexOf(chosen[i]) >= 0 && out.indexOf(chosen[i]) < 0) out.push(chosen[i]);
@@ -474,38 +471,14 @@
     return out;
   }
 
-  function updateNetworkStatus() {
-    if (document.hidden || networkPending) return;
-    networkPending = true;
-    TV.networkStatus(function (state) {
-      networkPending = false;
-      networkState = state;
-      setClass($('network-wifi'), 'active', state.wifi);
-      setClass($('network-vpn'), 'active', state.vpn);
-    });
-  }
-
   function renderTop() {
     $('title').textContent = tr('For You');
-    var indicators = $('network-status');
-    indicators.innerHTML = '';
-    var keys = topKeys(), candidates = topCandidates(), networks = [];
+    var keys = topKeys(), candidates = topCandidates();
     topButtons = [];
     for (var p = 0; p < keys.length; p++) {
       for (var c = 0; c < candidates.length; c++) {
-        var item = candidates[c];
-        if (item.id !== keys[p]) continue;
-        if (item.indicator) networks.push(item.id);
-        else topButtons.push(item);
+        if (candidates[c].id === keys[p]) topButtons.push(candidates[c]);
       }
-    }
-    $('title').style.left = (76 + 88 * networks.length) + 'px';
-    for (var n = 0; n < networks.length; n++) {
-      var name = networks[n];
-      var indicator = el('div', 'round network-indicator' + (networkState[name] ? ' active' : ''), indicators);
-      indicator.id = 'network-' + name;
-      indicator.style.left = (80 + 88 * n) + 'px';
-      sym(name, indicator);
     }
     var tabs = $('tabs');
     tabs.innerHTML = '';
@@ -1904,7 +1877,6 @@
     hideAmbient();
     if (document.hidden) return;
     idleAt = Date.now();
-    updateNetworkStatus();
     loadApps(function () { renderShelf(); renderDrawer(); updateFocus(); Data.refresh(); });
   });
 
@@ -1915,10 +1887,6 @@
   TV.holdScreenSaver(function () { return !sheetOpen() && (saverMode() === 'clock' || saverPhotos().length > 0); });
   fit();
   renderTop();
-  updateNetworkStatus();
-  window.addEventListener('online', updateNetworkStatus);
-  window.addEventListener('offline', updateNetworkStatus);
-  setInterval(updateNetworkStatus, 15000);
   applyDim();
   tickClock();
   loadApps(function () {

@@ -65,8 +65,6 @@ final class HomeApps {
     static final int RECENTS = 8;
     /** A Home Assistant entity in the drawer (HomeAssistant): OK calls its service, nothing opens. */
     static final int HOME_ASSISTANT = 9;
-    /** Read-only connection icons at the top left. */
-    static final int INDICATOR = 10;
     /** Image size of each card (16:9; on screen it shows up to ~330 px wide). */
     static final int TILE_W = 384, TILE_H = 216;
 
@@ -297,17 +295,16 @@ final class HomeApps {
         return out;
     }
 
-    // MARK: - Top buttons and connection indicators
+    // MARK: - Top buttons
 
     static final String TOP_LIVE = "live", TOP_INPUTS = "inputs", TOP_SETTINGS = "settings", TOP_RECENTS = "recents", TOP_STORE = "store", TOP_TV_SETTINGS = "tv-settings";
-    static final String TOP_WIFI = "wifi", TOP_VPN = "vpn";
     static final List<String> TOP_DEFAULT = Collections.unmodifiableList(java.util.Arrays.asList(
-            TOP_WIFI, TOP_VPN, TOP_LIVE, TOP_INPUTS, TOP_SETTINGS));
+            TOP_LIVE, TOP_INPUTS, TOP_SETTINGS));
     private static final List<String> TOP_ALL = Collections.unmodifiableList(java.util.Arrays.asList(
-            TOP_WIFI, TOP_VPN, TOP_LIVE, TOP_INPUTS, TOP_SETTINGS, TOP_TV_SETTINGS, TOP_RECENTS, TOP_STORE));
+            TOP_LIVE, TOP_INPUTS, TOP_SETTINGS, TOP_TV_SETTINGS, TOP_RECENTS, TOP_STORE));
     static final int MAX_TOP = TOP_ALL.size();
 
-    /** Selected items, in order within each corner (Settings > Top Buttons). */
+    /** Selected top buttons, in order (Settings > Top Buttons). */
     static List<String> topButtonKeys() {
         List<String> saved = Prefs.topButtons();
         if (saved == null) return TOP_DEFAULT;
@@ -344,8 +341,6 @@ final class HomeApps {
 
     private static Item topButton(String key) {
         switch (key) {
-            case TOP_WIFI: return action(INDICATOR, TOP_WIFI, "Wi-Fi", "wifi");
-            case TOP_VPN: return action(INDICATOR, TOP_VPN, "VPN", "vpn");
             case TOP_LIVE: return action(LIVE_TV, TOP_LIVE, Ui.tr("light|Live TV"), "live_tv");
             case TOP_INPUTS: return action(INPUTS, TOP_INPUTS, Ui.tr("HDMI Inputs"), "hdmi");
             case TOP_TV_SETTINGS: return tvSettings();

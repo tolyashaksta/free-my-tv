@@ -278,7 +278,7 @@ final class Prefs {
 
     static void setTheme(String v) { put("theme", v); }
 
-    /** Wi-Fi/Ethernet, Bluetooth and USB icons at the top-left of the home screen. */
+    /** Wi-Fi/Ethernet, VPN, Bluetooth and USB icons at the top-left of the home screen. */
     static boolean statusIcons() { return sp().getBoolean("statusicons", false); }
     static void setStatusIcons(boolean on) { put("statusicons", on); }
 
@@ -456,26 +456,22 @@ final class Prefs {
     // MARK: - Top buttons
 
     /**
-     * Top buttons and indicators, in order within each corner. null until the
+     * Top buttons, in order. null until the
      * user edits them (then HomeApps.TOP_DEFAULT applies); empty when they took all buttons off.
      */
     static List<String> topButtons() {
         String v = sp().getString("topButtons", null);
         if (v == null) return null;
         List<String> out = new ArrayList<>();
-        for (String p : v.split(",")) if (!p.isEmpty()) out.add(p);
-        // They were always shown before they joined this editor. Keep them on for existing button choices.
-        if (!sp().getBoolean("topStatusEdited", false)) {
-            if (!out.contains(HomeApps.TOP_VPN)) out.add(0, HomeApps.TOP_VPN);
-            if (!out.contains(HomeApps.TOP_WIFI)) out.add(0, HomeApps.TOP_WIFI);
-        }
+        // Ignore retired indicator keys, preserving the order of every real button.
+        for (String p : v.split(",")) if (!p.isEmpty() && !p.equals("wifi") && !p.equals("vpn")) out.add(p);
         return out;
     }
 
     static void setTopButtons(List<String> keys) {
         StringBuilder sb = new StringBuilder();
         for (String p : keys) sb.append(sb.length() == 0 ? "" : ",").append(p);
-        sp().edit().putString("topButtons", sb.toString()).putBoolean("topStatusEdited", true).apply();
+        sp().edit().putString("topButtons", sb.toString()).remove("topStatusEdited").apply();
         version++;
     }
 

@@ -31,6 +31,7 @@ import android.media.tv.TvInputManager;
 import android.net.ConnectivityManager;
 import android.net.Network;
 import android.net.NetworkCapabilities;
+import android.net.NetworkRequest;
 import android.os.Build;
 import android.os.Environment;
 import android.os.Handler;
@@ -119,11 +120,10 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private static final float WATCH_GAP = 40;
     private static final float L_TALL_W = 320, L_CARD_GAP = 40, L_BUTTON = 68, L_BUTTON_GAP = 20, L_BUTTON_CY = 103;
     private static final float L_STATUS = 25, L_STATUS_GAP = 22;
-    private static final String[] STATUS_SYMBOLS = {"wifi", "ethernet", "bluetooth", "usb"};
+    private static final String[] STATUS_SYMBOLS = {"wifi", "ethernet", "vpn", "bluetooth", "usb"};
     private static final float L_PLATTER_TOP = 814, L_TILE_H = 126;
     private static final float L_DATE_BASE = 330, L_CLOCK_BASE = 540, L_WEATHER_BASE = 626, L_QUOTES_BASE = 694;
     private static final int L_INK = 0xFF1D1D1F, L_DIM = 0xFF6E6E73, L_FAINT = 0xFF8E8E93;
-    private static final int NETWORK_ON = 0xEBFFFFFF, NETWORK_OFF = 0xFF5C5C62;
     private static String[] tabs;
     private static int tabsGeneration = -1;
     private static final String[] TAB_KIND = {null, "movie", "tv"};
@@ -134,8 +134,8 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private final HomeData data;
     private final Recs recs;
     private final NowPlaying.Watch playing;
-    private final NetworkStatus networkStatus;
-    private boolean wifiConnected, vpnConnected, wifiIndicatorShown;
+    private final StatusNetworks statusNetworks = new StatusNetworks();
+    private boolean vpnConnected;
     private final Click click;
     private final Handler handler = new Handler(Looper.getMainLooper());
     /** The background follows the focused pick once it has been there this long (see bgFollow). */
@@ -219,7 +219,6 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private Paint menuTitlePaint, menuSubPaint, menuOptionPaint;
     private final RectF[] cardRects = new RectF[Recs.MAX_CARDS];
     private final List<HomeApps.Item> lightButtons = new ArrayList<>();
-    private final List<HomeApps.Item> lightIndicators = new ArrayList<>();
     private Paint lTitle, lTab, lTabOn, lCardTitle, lCardMeta, lQuote, lTip, lDate, lClock, lWeather, lClockQuote;
     private Shader lightGradient;
     // Continue Watching: the background takes the focused card's colour (worked out once per picture, WatchArt), easing
@@ -356,7 +355,6 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private final Paint sheen = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint veil = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint fill = new Paint(Paint.ANTI_ALIAS_FLAG);
-    private final Paint networkSlash = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint tileFill = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final RectF tmp = new RectF(), cell = new RectF(), screen = new RectF();
     private final TextPaint fitPaint = new TextPaint();
@@ -443,20 +441,28 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     }
 
     private final ConnectivityManager.NetworkCallback networkCallback = new ConnectivityManager.NetworkCallback() {
-        @Override public void onCapabilitiesChanged(Network network, NetworkCapabilities caps) {
-            setNetwork(caps.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET) ? 2
-                    : caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) ? 1 : 0);
+        @Override public void onCapabilitiesChanged(Network n, NetworkCapabilities caps) {
+            if (!networkRegistered) return;
+            int transports = (caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) ? StatusNetworks.WIFI : 0)
+                    | (caps.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET) ? StatusNetworks.ETHERNET : 0)
+                    | (caps.hasTransport(NetworkCapabilities.TRANSPORT_VPN) ? StatusNetworks.VPN : 0);
+            statusNetworks.update(n, transports);
+            updateNetworkIcons();
         }
 
-        @Override public void onLost(Network network) {
-            setNetwork(0);
+        @Override public void onLost(Network n) {
+            if (!networkRegistered) return;
+            statusNetworks.remove(n);
+            updateNetworkIcons();
         }
     };
 
-    /** Wi-Fi or Ethernet, for the icon at the top; none when the TV has no network. */
-    private void setNetwork(int type) {
-        if (type == network) return;
+    private void updateNetworkIcons() {
+        int type = statusNetworks.networkType();
+        boolean vpn = statusNetworks.vpnConnected();
+        if (type == network && vpn == vpnConnected) return;
         network = type;
+        vpnConnected = vpn;
         status.invalidate();
     }
 
@@ -519,12 +525,14 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private void startStatus() {
         if (!Prefs.statusIcons()) return;
         updateDevices();
-        // The registration hands the current network over at once, so the first read is this callback. With no
-        // network at all it hands nothing, and the icon would keep the one from before the pause (Wi-Fi turned off).
         if (connectivity != null && !networkRegistered) {
+            statusNetworks.clear();
+            updateNetworkIcons();
             try {
-                if (connectivity.getActiveNetwork() == null) setNetwork(0);
-                connectivity.registerDefaultNetworkCallback(networkCallback, handler);
+                // A default-network callback can hide the Wi-Fi beneath a VPN. Watch both in the same status lifecycle.
+                NetworkRequest request = new NetworkRequest.Builder()
+                        .removeCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN).build();
+                connectivity.registerNetworkCallback(request, networkCallback, handler);
                 networkRegistered = true;
             } catch (RuntimeException ignored) {
             }
@@ -615,13 +623,6 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         data = HomeData.get(a);
         recs = Recs.get(a);
         playing = new NowPlaying.Watch(a, this::onPlaying);
-        networkStatus = new NetworkStatus(a, (wifi, vpn) -> {
-            if (wifiConnected == wifi && vpnConnected == vpn) return;
-            wifiConnected = wifi;
-            vpnConnected = vpn;
-            heroDirty = true;
-            wake();
-        });
         click = new Click(a);
         shelfVisible = HomeApps.shelfVisible(a);
         ui = a.getSharedPreferences("home-ui", Context.MODE_PRIVATE);
@@ -694,7 +695,6 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     void resume() {
         if (running) return;
         running = true;
-        networkStatus.start();
         checkNight(false);
         boolean h24 = Ui.h24();
         if (h24 != clock24) {   // 12/24 hours changed (the TV's or the Clock row's): the clock and the drawer's times again
@@ -743,7 +743,6 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     void pause() {
         if (!running) return;
         running = false;
-        networkStatus.stop();
         handler.removeCallbacks(bgFollow);
         cancelReorder(true);
         if (recents != null) recents.closeNow();
@@ -764,7 +763,6 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
 
     void destroy() {
         pause();
-        networkStatus.close();
         try {
             if (launcherApps != null) launcherApps.unregisterCallback(packages);
         } catch (RuntimeException ignored) {
@@ -807,13 +805,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     private void setLightButtons(List<HomeApps.Item> list) {
         if (reorderTop) cancelReorder(true);
         lightButtons.clear();
-        lightIndicators.clear();
-        wifiIndicatorShown = false;
-        for (HomeApps.Item item : list) {
-            if (HomeApps.TOP_WIFI.equals(item.key)) wifiIndicatorShown = true;
-            if (item.kind == HomeApps.INDICATOR) lightIndicators.add(item);
-            else lightButtons.add(item);
-        }
+        lightButtons.addAll(list);
         if (zone == Z_TOP && topIndex >= 3 + lightButtons.size()) {
             topIndex = 2 + lightButtons.size();
             if (topIndex < 3 && !picksOn()) zone = Z_SHELF;   // without the picks the tabs can't hold focus
@@ -926,9 +918,6 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
     }
 
     private void makePaints() {
-        networkSlash.setColor(NETWORK_OFF);
-        networkSlash.setStrokeWidth(3 * k);
-        networkSlash.setStrokeCap(Paint.Cap.ROUND);
         labelPaint = Ui.text(Ui.medium, 25 * k, 0xC7FFFFFF);
         labelPaint.setLetterSpacing(0.1f);
         titlePaint = new TextPaint(Ui.text(Ui.displayMedium, 76 * k, 0xFFFFFFFF));
@@ -4005,8 +3994,6 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             Symbols.warm(getContext(), it.symbol, 27 * k);
             Symbols.warm(getContext(), it.symbol, 27 * k * 1.1f);
         }
-        Symbols.warm(getContext(), "wifi", 27 * k);
-        Symbols.warm(getContext(), "vpn", 27 * k);
         if (Prefs.statusIcons()) {   // at the sizes drawStatusIcon uses: drawing never scales a 150 px PNG down to 25
             for (String name : STATUS_SYMBOLS) {
                 Symbols.warm(getContext(), name, Symbols.pointSizeForHeight(getContext(), name, L_STATUS * k * statusScale(name)));
@@ -4624,11 +4611,6 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
 
     private void drawLightTop(Canvas c) {
         applyTone();
-        // This layer spans the screen; the status layer starts at x=760 and clips the left corner.
-        for (int i = 0; i < lightIndicators.size(); i++) {
-            HomeApps.Item item = lightIndicators.get(i);
-            drawNetworkIndicator(c, item.symbol, i, HomeApps.TOP_WIFI.equals(item.key) ? wifiConnected : vpnConnected);
-        }
         if (clockMode()) {
             titleRight = 0;
             drawClock(c);
@@ -4636,7 +4618,7 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
             return;
         }
         String hello = picksMode() ? Ui.tr("For You") : Ui.tr("Continue Watching");
-        float titleLeft = (MARGIN + lightIndicators.size() * (L_BUTTON + L_BUTTON_GAP)) * k;
+        float titleLeft = MARGIN * k;
         c.drawText(hello, titleLeft - Ui.leftBearing(lTitle, hello), L_TITLE_BASE * k, lTitle);
         titleRight = titleLeft + lTitle.measureText(hello);
         if (!picksMode()) {
@@ -4844,30 +4826,16 @@ final class HomeView extends ViewGroup implements Choreographer.FrameCallback, H
         Symbols.draw(getContext(), c, "bedtime", right - tw - size * 0.9f, cy, size, lQuote.getColor());
     }
 
-    /** Status only: the same size and spacing as the top buttons, without a focus or a click target. */
-    private void drawNetworkIndicator(Canvas c, String symbol, int index, boolean connected) {
-        float cx = (MARGIN + L_BUTTON / 2 + index * (L_BUTTON + L_BUTTON_GAP)) * k;
-        float cy = L_BUTTON_CY * k, rad = L_BUTTON * k / 2;
-        cell.set(cx - rad, cy - rad, cx + rad, cy + rad);
-        tmp.set(cell);
-        tmp.offset(0, 6 * k);
-        shadow.setColor(Ui.alpha(0xFF000000, tone(0.1f, 0.3f)));
-        shadows.draw(c, tmp, rad, SHADOW_BLUR * k, shadow);
-        // Smoked glass keeps the white connection state legible in the day look too.
-        scene.liquid(c, cell, rad, SMOKE, 0.5f, 0.01f, 12 * k, 8 * k, 0.45f, 1);
-        Symbols.draw(getContext(), c, symbol, cx, cy, 27 * k, connected ? NETWORK_ON : NETWORK_OFF);
-        if (!connected) c.drawLine(cx - 15 * k, cy - 15 * k, cx + 15 * k, cy + 15 * k, networkSlash);
-    }
-
-    /** Wi-Fi/Ethernet, Bluetooth (when something is connected) and a USB drive, at the top left. */
+    /** Wi-Fi/Ethernet, VPN, Bluetooth (when something is connected) and a USB drive, at the top left. */
     private void drawStatusIcons(Canvas c) {
         if (!Prefs.statusIcons()) return;
         float height = L_STATUS * k, gap = L_STATUS_GAP * k;
         int color = Ui.alpha(tone(L_INK, 0xEBFFFFFF), 0.85f);
-        float x = (MARGIN + lightIndicators.size() * (L_BUTTON + L_BUTTON_GAP)) * k;
+        float x = MARGIN * k;
         // The top title ("For You", or "Continue Watching") is on this line too: the icons start after it, not on it.
         if (!clockMode()) x += lTitle.measureText(picksMode() ? Ui.tr("For You") : Ui.tr("Continue Watching")) + gap;
-        if (network != 0 && (network == 2 || !wifiIndicatorShown)) x = drawStatusIcon(c, network == 2 ? "ethernet" : "wifi", x, height, gap, color);
+        if (network != 0) x = drawStatusIcon(c, network == 2 ? "ethernet" : "wifi", x, height, gap, color);
+        if (vpnConnected) x = drawStatusIcon(c, "vpn", x, height, gap, color);
         if (bluetoothConnected) x = drawStatusIcon(c, "bluetooth", x, height, gap, color);
         if (usbConnected) drawStatusIcon(c, "usb", x, height, gap, color);
     }

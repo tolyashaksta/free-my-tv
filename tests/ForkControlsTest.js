@@ -16,7 +16,7 @@ var sandbox = {
   assert(code, name + ' must exist');
   vm.runInNewContext(code[0], sandbox);
 });
-assert.deepStrictEqual(Array.from(sandbox.topKeys()), chosen, 'saved indicator and button order survives');
+assert.deepStrictEqual(Array.from(sandbox.topKeys()), ['tv-settings', 'live', 'settings'], 'retired indicators disappear without disturbing button order');
 var live = sandbox.topCandidates().filter(function (item) { return item.id === 'live'; })[0];
 assert.strictEqual(live.title, 'Console', 'configured Live TV button shows HDMI name');
 assert.strictEqual(live.symbol, 'tv');
