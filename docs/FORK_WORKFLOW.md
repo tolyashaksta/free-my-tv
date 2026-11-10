@@ -56,8 +56,11 @@ Replace the example tag with the requested release. Preserve the fork's TV Setti
 All Apps shelf shortcut. These coexist with 1.4's Recent Apps, App Store and draggable top buttons.
 
 The old round Wi-Fi/VPN indicators were deliberately removed at the owner's request. On Android, use the upstream
-Status icons setting: Wi-Fi/Ethernet, VPN, Bluetooth audio and USB. VPN appears only while connected, in the same
-style as the other icons. A single network subscription within the upstream status lifecycle tracks the underlying
+Status icons setting: Wi-Fi/Ethernet, VPN, Bluetooth audio and USB. VPN appears only while connected and visible to
+the app, in the same style as the other icons. Android can hide a per-app VPN from a launcher excluded from its
+allowed apps: include Free My TV in that VPN's app list if its status should be visible through these normal APIs.
+Bluetooth means an audio connection (headphones/speaker), not merely an enabled adapter or a connected remote.
+A single network subscription within the upstream status lifecycle tracks the underlying
 connection and VPN together; turning the setting off or leaving Home stops it. Never restore the old separate
 NetworkStatus watcher, its glass circles or its Top Buttons entries. Saved legacy indicator keys are ignored while
 the real top buttons keep their order. Existing explicitly selected legacy indicators enable Status icons once;
