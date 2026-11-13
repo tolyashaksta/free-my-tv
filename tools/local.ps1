@@ -44,6 +44,7 @@ try {
     Invoke-Bash @('tools/test-remote.sh')
     Invoke-Bash @('tools/test-order.sh')
     Invoke-Bash @('tools/test-status.sh')
+    Invoke-Bash @('tools/test-net.sh')
     Invoke-Bash @('tools/check.sh', 'web')
 } finally {
     $env:FREEMYTV_KEYSTORE = $previousKey

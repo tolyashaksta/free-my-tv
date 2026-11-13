@@ -81,3 +81,14 @@ the checkout.
 The customized 1.4 APK was then built using the recovered original signing key and installed over 1.3 without
 uninstalling. The installed APK's SHA-256 matched the build, and the home activity and screensaver remained selected.
 The private installation record is `.local/installed-build.json`; the previous APK is `.local/tv-before-update.apk`.
+
+
+## Release update on 2026-11-13
+
+Merged published upstream `v1.5.0` (`0e33f16`) into `main`, starting from `1bced2b`.
+Preserved TV Settings and configurable All Apps, the unified status icons with VPN and their one-time migration.
+The web editor combines the new input ordering with the fork's top-button editor and Arabic direction support.
+Windows checks now include NetPicture tests; translation catalogues stay LF through `.gitattributes`, as required
+by upstream's translation check. The full `tools/local.ps1` check passed: Android build, remote/order/status/network
+picture tests, all translations, web preferences/fork controls, LG/Samsung packages and old-TV syntax/CSS checks.
+This source update does not install anything on the TV; its last verified installation remains the customized 1.4.

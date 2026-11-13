@@ -90,6 +90,15 @@ final class Prefs {
     /** Google TV Streamer's Vendor_18d1_Product_9451.kl; MACRO_1 (313) was added in API 34. */
     static final int KEY_GOOGLE_YOUTUBE = KeyEvent.KEYCODE_BUTTON_3, KEY_GOOGLE_NETFLIX = KeyEvent.KEYCODE_BUTTON_4,
             KEY_GOOGLE_CUSTOM = 313;
+    /**
+     * The onn remote (Vendor_0957_Product_0031.kl; onn 4K Pro, Google TV 14): HID usages 0x77 to 0x7A. YouTube goes to
+     * launcherx (off in our mode); Netflix, Disney+ and Paramount+ to droidlogic's and gretzky's receivers. Free TV is
+     * usage 0x187, KEYCODE_FEATURED_APP_1 (297, public since API 33: a number here, since minSdk is 26), also for
+     * launcherx: without the filter it does nothing in our mode.
+     */
+    static final int KEY_ONN_YOUTUBE = KeyEvent.KEYCODE_BUTTON_3, KEY_ONN_NETFLIX = KeyEvent.KEYCODE_BUTTON_4,
+            KEY_ONN_DISNEY = KeyEvent.KEYCODE_BUTTON_9, KEY_ONN_PARAMOUNT = KeyEvent.KEYCODE_BUTTON_10,
+            KEY_ONN_FREE_TV = 297;
     /** A button's value that opens this home screen's All Apps. */
     static final String ALL_APPS = HomeMode.PKG + "#all";
     /**
@@ -100,8 +109,11 @@ final class Prefs {
     static final int KEY_JVC_SHORTCUT = 200_383, KEY_JVC_SETTINGS = KeyEvent.KEYCODE_NOTIFICATION;
     static final String TV_SHORTCUTS = HomeMode.PKG + "#tvshortcuts";
     static final String QUICK_SETTINGS = HomeMode.PKG + "#quicksettings";
-    static final int[] KEYS = RemoteKeys.GOOGLE_STREAMER
+    static final int[] KEYS = RemoteKeys.CHROMECAST_SABRINA ? new int[] {SabrinaRemote.KEY_YOUTUBE}
+            : RemoteKeys.GOOGLE_STREAMER
             ? new int[] {KEY_GOOGLE_YOUTUBE, KEY_GOOGLE_NETFLIX, KEY_GOOGLE_CUSTOM}
+            : RemoteKeys.ONN ? new int[] {KEY_ONN_YOUTUBE, KEY_ONN_NETFLIX, KEY_ONN_DISNEY, KEY_ONN_PARAMOUNT,
+                    KEY_ONN_FREE_TV}
             : RemoteKeys.JVC_SKYWORTH ? new int[] {KEY_JVC_SHORTCUT, KEY_JVC_SETTINGS}
             : RemoteKeys.PHILIPS_GTV ? new int[] {KEY_PHILIPS_SETTINGS, KEY_PHILIPS_APPS, KEY_PHILIPS_GUIDE, KEY_PHILIPS_NETFLIX,
                     KEY_PHILIPS_YOUTUBE, KEY_PHILIPS_PRIME}
@@ -360,6 +372,11 @@ final class Prefs {
 
     static void setPowerOn(String v) { put("powerOn", v); }
 
+    /** Home Settings > Live TV button: the TV input (its id) the Live TV button opens instead, or "" for Live TV. */
+    static String liveButton() { return sp().getString("liveButton", ""); }
+
+    static void setLiveButton(String inputId) { put("liveButton", inputId); }
+
     // MARK: - Widgets and coins
 
     static boolean weather() { return sp().getBoolean("weather", true); }
@@ -446,6 +463,10 @@ final class Prefs {
         put("shelf", sb.toString());
     }
 
+    /** The shelf puts the app last opened from Free My TV first (Recent) instead of keeping the order set in Settings > Shelf. */
+    static boolean shelfRecent() { return sp().getBoolean("shelfRecent", false); }
+    static void setShelfRecent(boolean on) { put("shelfRecent", on); }
+
     // MARK: - Sleep timer
 
     /** When the sleep timer ends (System.currentTimeMillis); SleepTimer's alarm says whether it's still on. */
@@ -491,11 +512,50 @@ final class Prefs {
         version++;
     }
 
+    // MARK: - Drawer inputs
+
+    /** The drawer's inputs in the person's order (Settings > Inputs): the shown ones' keys ("live", "hdmi1"...),
+     *  an input the TV no longer lists keeping its place. null until the editor is used: the TV's order then. */
+    static List<String> inputsOrder() {
+        String v = sp().getString("inputsOrder", null);
+        if (v == null) return null;
+        List<String> out = new ArrayList<>();
+        for (String p : v.split(",")) if (!p.isEmpty()) out.add(p);
+        return out;
+    }
+
+    static void setInputsOrder(List<String> keys) {
+        StringBuilder sb = new StringBuilder();
+        for (String p : keys) sb.append(sb.length() == 0 ? "" : ",").append(p);
+        put("inputsOrder", sb.toString());
+    }
+
+    /** The inputs Settings > Inputs hides; none until it's used. */
+    static List<String> inputsHidden() {
+        String v = sp().getString("inputsHidden", "");
+        List<String> out = new ArrayList<>();
+        for (String p : v.split(",")) if (!p.isEmpty()) out.add(p);
+        return out;
+    }
+
+    static void setInputsHidden(List<String> keys) {
+        StringBuilder sb = new StringBuilder();
+        for (String p : keys) sb.append(sb.length() == 0 ? "" : ",").append(p);
+        put("inputsHidden", sb.toString());
+    }
+
     // MARK: - Remote buttons
 
     private static String defaultApp(int keyCode) {
+        if (RemoteKeys.CHROMECAST_SABRINA) {
+            return keyCode == SabrinaRemote.KEY_YOUTUBE ? "com.google.android.youtube.tv" : "";
+        }
         if (RemoteKeys.GOOGLE_STREAMER) {
             return keyCode == KEY_GOOGLE_YOUTUBE ? "com.google.android.youtube.tv" : "";
+        }
+        if (RemoteKeys.ONN) {
+            // YouTube's receiver (launcherx) is off in our mode; the others keep opening their apps until one is picked.
+            return keyCode == KEY_ONN_YOUTUBE ? "com.google.android.youtube.tv" : "";
         }
         if (RemoteKeys.JVC_SKYWORTH) {
             if (keyCode == KEY_JVC_SHORTCUT) return TV_SHORTCUTS;

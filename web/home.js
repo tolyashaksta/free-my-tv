@@ -66,6 +66,43 @@
     stage.style.webkitTransform = stage.style.transform = s === 1 ? '' : 'scale(' + s + ')';
   }
 
+  // MARK: - Right to left
+
+  // In a right-to-left language (Arabic) the screen is mirrored: x is the distance from the start edge, which is the
+  // left one in English and the right one in Arabic. The arrows follow it (move), and the stylesheet's .rtl rules
+  // mirror what isn't placed here.
+  var rtl = false;
+
+  function direction() {
+    rtl = I18N.rtl;
+    setClass(body, 'rtl', rtl);
+    document.documentElement.dir = rtl ? 'rtl' : 'ltr';
+  }
+
+  /** x pixels in from the start edge. */
+  function startAt(node, x) {
+    node.style.left = rtl ? 'auto' : x + 'px';
+    node.style.right = rtl ? x + 'px' : 'auto';
+  }
+
+  /** x pixels in from the end edge. */
+  function endAt(node, x) {
+    node.style.left = rtl ? x + 'px' : 'auto';
+    node.style.right = rtl ? 'auto' : x + 'px';
+  }
+
+  /** The arrow of a row that goes on (Search, Save): it points the way forward, which is left when mirrored. */
+  function forward(parent) {
+    var arrow = sym('chevron_right', parent);
+    if (rtl) arrow.style.webkitTransform = arrow.style.transform = 'scaleX(-1)';
+    return arrow;
+  }
+
+  /** A slide of x pixels toward the end edge, as a transform. */
+  function slide(node, x) {
+    node.style.webkitTransform = node.style.transform = 'translateX(' + (rtl ? -x : x) + 'px)';
+  }
+
   // MARK: - Apps on the shelf
 
   /** Shelf apps in this order when installed, like the Android app: key, LG app id, name on the TV, brand gradient. */
@@ -330,7 +367,7 @@
     var bottom = k ? k[3][1] : app.color ? darken(app.color, 0.62) : '#161618';
     paint(box, top, bottom);
     if (app.symbol) { setClass(box, 'shortcut', true); sym(app.symbol, box); }
-    var word = el('div', 'word', box, app.title);
+    var word = el('div', 'word', box, I18N.name(app.title));
     if (wordSize) word.style.fontSize = wordSize + 'px';
     if (app.icon) {
       var img = el('img', '', box), url = app.icon;
@@ -416,7 +453,7 @@
     focusRows($('settings'), st.row, st.zone === Z.SETTINGS);
     focusRows($('shelfedit'), st.edit, st.zone === Z.EDIT);
     focusRows($('langpick'), st.lang, st.zone === Z.LANG);
-    if (langHint) langHint.textContent = (st.lang + 1) + ' / ' + languageChoices().length + '  ·  ' + tr('OK picks, Back cancels.');
+    if (langHint) langHint.textContent = I18N.digits((st.lang + 1) + ' / ' + languageChoices().length) + '  ·  ' + tr('OK picks, Back cancels.');
     focusRows($('citypick'), st.city, st.zone === Z.CITY);
     focusRows($('keypick'), st.key, st.zone === Z.KEY);
     setClass(body, 'drawer-open', st.zone === Z.DRAWER);
@@ -491,7 +528,7 @@
     buttons.innerHTML = '';
     for (var b = 0; b < topButtons.length; b++) {
       var r = el('button', 'round' + (b === topButtons.length - 1 ? ' last' : ''), buttons);
-      r.style.left = (1840 - 68 - 88 * (topButtons.length - 1 - b)) + 'px';
+      startAt(r, 1840 - 68 - 88 * (topButtons.length - 1 - b));
       sym(topButtons[b].symbol, r);
       el('div', 'tip', r, topButtons[b].title);
       hover(r, Z.TOP, 3 + b);
@@ -532,7 +569,7 @@
       var poster = el('div', 'layer', img);
       poster.style.backgroundImage = 'url(' + (p.poster ? Data.image(p.poster, 'w342') : Data.image(p.backdrop, 'w780')) + ')';
       el('div', 'layer back', img);
-      el('div', 'name', card, p.title);
+      el('div', 'name', card, I18N.name(p.title));
       if (p.meta) el('div', 'meta', card, p.meta);
       hover(card, Z.CARDS, c);
     }
@@ -551,7 +588,7 @@
     var holder = $('cards'), nodes = holder.children, left = 80, scroll = Math.max(0, st.card - 2) * 360;
     for (var i = 0; i < nodes.length; i++) {
       var wide = i === st.card, w = wide ? 1040 : 320, n = nodes[i], at = left - scroll;
-      n.style.left = left + 'px';
+      startAt(n, left);
       n.style.width = w + 'px';
       setClass(n, 'wide', wide);
       setClass(n, 'edge', at < 0 || at > 1740);
@@ -561,7 +598,7 @@
       }
       left += w + 40;
     }
-    holder.style.webkitTransform = holder.style.transform = 'translateX(' + (-scroll) + 'px)';
+    slide(holder, -scroll);
   }
 
   var bgUrl = null, bgFront = 'bgA';
@@ -607,7 +644,7 @@
 
   /** On the minute, so the clock never runs late (the 30-second refresh could, by up to 30 s). */
   function tickClock() {
-    renderClock();
+    if (!resting()) renderClock();
     setTimeout(tickClock, 60000 - Date.now() % 60000 + 50);
   }
 
@@ -626,7 +663,7 @@
     platter.style.width = (width + 2 * pad) + 'px';
     platter.style.top = (814 + 126 - th) + 'px';
     platter.style.height = (th + 2 * pad) + 'px';
-    $('quotes').style.right = (1920 - left - width) + 'px';
+    endAt($('quotes'), 1920 - left - width);
     var tiles = $('tiles');
     tiles.innerHTML = '';
     tileStep = tw + gap;
@@ -645,8 +682,8 @@
     platter.innerHTML = '';
     for (var a = 0; a < 2; a++) {
       var arrow = sym('chevron_right', platter);
-      arrow.className += a ? ' more' : ' more back';
-      arrow.style.left = (a ? width + 2 * pad - 14 : 14) - 8.5 + 'px';
+      arrow.className += (a === 1) === rtl ? ' more back' : ' more';   // the arrow at the start edge points out, toward it
+      startAt(arrow, (a ? width + 2 * pad - 14 : 14) - 8.5);
       arrow.style.top = (pad + th / 2 - 8.5) + 'px';
     }
     st.shelf = Math.min(st.shelf, Math.max(0, shelf.length - 1));
@@ -658,11 +695,11 @@
     var row = $('tiles'), tiles = row.children, n = Math.min(shelf.length, SHELF_VISIBLE);
     for (var i = 0; i < shelf.length; i++) {
       var shown = i >= shelfFirst && i < shelfFirst + n;
-      tiles[i].style.left = (tileLeft + i * tileStep) + 'px';
+      startAt(tiles[i], tileLeft + i * tileStep);
       tiles[i].style.opacity = shown ? '' : '0';
       tiles[i].style.pointerEvents = shown ? '' : 'none';
     }
-    row.style.webkitTransform = row.style.transform = 'translateX(' + (-shelfFirst * tileStep) + 'px)';
+    slide(row, -shelfFirst * tileStep);
     var arrows = $('platter').children;
     arrows[0].style.visibility = shelfFirst > 0 ? '' : 'hidden';
     arrows[1].style.visibility = shelfFirst + n < shelf.length ? '' : 'hidden';
@@ -685,9 +722,9 @@
     var d = $('drawer');
     d.innerHTML = '';
     drawerItems = [];
-    for (var i = 0; i < inputs.length; i++) {
-      var x = inputs[i];
-      if (x.key === 'live' && !Prefs.liveInput()) continue;
+    var shown = orderedInputs();
+    for (var i = 0; i < shown.length; i++) {
+      var x = shown[i];
       drawerItems.push({label: x.label || tr('Live TV'), symbol: x.symbol, off: !x.connected, run: launcher(x.id, x.label)});
     }
     drawerInputs = drawerItems.length;
@@ -700,14 +737,14 @@
     for (var k = 0; k < n; k++) {
       if (k === drawerInputs && k > 0) {
         xPos += groupGap - gap;
-        el('div', 'row-title', d, tr('Shortcuts')).style.left = (xPos + 4) + 'px';
+        startAt(el('div', 'row-title', d, tr('Shortcuts')), xPos + 4);
       }
-      if (k === 0 && drawerInputs) el('div', 'row-title', d, tr('Inputs')).style.left = '84px';
+      if (k === 0 && drawerInputs) startAt(el('div', 'row-title', d, tr('Inputs')), 84);
       var item = drawerItems[k], key = el('div', 'key glass' + (item.off ? ' off' : ''), d);
-      key.style.left = xPos + 'px';
+      startAt(key, xPos);
       key.style.width = tw + 'px';
       sym(item.symbol, key);
-      el('div', 'label', key, item.label);
+      el('div', 'label', key, I18N.name(item.label));
       hover(key, Z.DRAWER, k);
       xPos += tw + gap;
     }
@@ -724,7 +761,7 @@
     if (wx) {
       var w = el('div', 'panel glass', d);
       w.id = 'weather';
-      w.style.left = '80px';
+      startAt(w, 80);
       w.style.width = ((qt ? split - 16 : 1840) - 80) + 'px';
       renderWeather(w);
     }
@@ -732,7 +769,7 @@
       var q = el('div', 'panel glass', d);
       q.id = 'prices';
       var left = wx ? split + 16 : 80;
-      q.style.left = left + 'px';
+      startAt(q, left);
       q.style.width = (1840 - left) + 'px';
       renderPrices(q, coins);
     }
@@ -761,7 +798,7 @@
     var hours = el('div', 'hours', card), width = parseFloat(card.style.width) - 30 - 422, hw = width / n;
     for (var i = 0; list && i < list.length && i < n; i++) {
       var h = el('div', 'hour', hours), x = list[i];
-      h.style.left = (hw * i) + 'px';
+      startAt(h, hw * i);
       h.style.width = hw + 'px';
       el('div', 't', h, days ? Data.weekday(x.at) : Data.hour(x.at));
       sym(Data.symbol(x.code, days || x.day), h);
@@ -806,7 +843,7 @@
 
   // "Rain in ~40 min" counts down between forecasts: the card is drawn again when its line would read otherwise.
   setInterval(function () {
-    if (Prefs.weather() && Data.weather && weatherParts(Data.weather).join(' · ') !== extraKey) renderPanels();
+    if (!resting() && Prefs.weather() && Data.weather && weatherParts(Data.weather).join(' · ') !== extraKey) renderPanels();
   }, 60000);
 
   function renderPrices(card, coins) {
@@ -848,10 +885,10 @@
     grid.innerHTML = '';
     for (var i = 0; i < others.length; i++) {
       var r = Math.floor(i / 5), c = i % 5, cell = el('div', 'cell', grid);
-      cell.style.left = (130 + c * 340) + 'px';
+      startAt(cell, 130 + c * 340);
       cell.style.top = (196 + r * 239) + 'px';
       face(others[i], el('div', 'face', cell), wordFit(others[i].title, 300, 34));
-      el('div', 'label', cell, others[i].title);
+      el('div', 'label', cell, I18N.name(others[i].title));
       hover(cell, Z.APPS, i);
     }
   }
@@ -903,7 +940,7 @@
         step: function (d) { cycle('dim', ['off', 'low', 'medium', 'high', 'auto'], Prefs.dim(), d); applyDim(); }},
       {label: tr('Screensaver'), value: saverMode() === 'clock' ? tr('Clock') : tr('Photos'),
         step: function (d) { cycle('saver', ['photos', 'clock'], saverMode(), d); }},
-      {label: tr('Picks per tab'), value: String(Prefs.cards()),
+      {label: tr('Picks per tab'), value: String(I18N.digits(Prefs.cards())),
         step: function (d) { Prefs.set('cards', 3 + (Prefs.cards() - 3 + (d || 1) + 4) % 4); renderCards(); }},
       {label: tr('Cartoons and anime'), toggle: !Prefs.hideAnimation(),
         step: function () { Prefs.set('hideAnimation', !Prefs.hideAnimation()); Data.refresh(); }},
@@ -948,8 +985,11 @@
     }
     rows.push({label: tr('Live TV button'), value: boxLabel(),
       step: function (d) { cycle('boxInput', ['live', 'hdmi1', 'hdmi2', 'hdmi3', 'hdmi4'], Prefs.boxInput(), d); renderTop(); }});
-    rows.push({label: tr('Live TV'), toggle: Prefs.liveInput(),
-      step: function () { Prefs.set('liveInput', !Prefs.liveInput()); renderDrawer(); }});
+    rows.push({label: tr('Inputs'), value: '›', inputs: true, step: function (d) { if (d >= 0) openInputsEdit(); }});
+    if (TV.canReturnHome) {
+      rows.push({label: tr('Home button'), value: Prefs.homeReturns() ? 'Free My TV' : tr('home|TV home screen'),
+        step: function () { Prefs.set('homeReturns', !Prefs.homeReturns()); TV.returnHome(Prefs.homeReturns()); }});
+    }
     rows.push({label: tr('Shelf'), value: '›', shelf: true, step: function (d) { if (d >= 0) openShelfEdit(); }});
     rows.push({label: tr('Top Buttons'), value: '›', top: true, step: function (d) { if (d >= 0) openShelfEdit(true); }});
     rows.push({label: tr('About this TV'), value: '›', about: true, step: function (d) { if (d >= 0) openAbout(); }});
@@ -974,13 +1014,13 @@
     rowsNow = settingRows();
     list.style.height = Math.min(rowsNow.length, 7) * 78 + 'px';
     for (var i = 0; i < rowsNow.length; i++) {
-      var r = rowsNow[i], row = el('div', 'row' + (r.dim ? ' dim' : ''), holder, r.label);
+      var r = rowsNow[i], row = el('div', 'row' + (r.dim ? ' dim' : ''), holder, I18N.name(r.label));
       if (r.toggle !== undefined) setClass(el('div', 'toggle', row), 'on', r.toggle);
       else {
         var v = el('span', 'value', row);
         if (r.value === '›') v.textContent = '›';
-        else if (r.opens) { v.appendChild(document.createTextNode(r.value)); el('span', 'chev', v, '›'); }
-        else { el('span', 'chev', v, '‹'); v.appendChild(document.createTextNode(r.value)); el('span', 'chev', v, '›'); }
+        else if (r.opens) { v.appendChild(document.createTextNode(I18N.name(r.value))); el('span', 'chev', v, '›'); }
+        else { el('span', 'chev', v, '‹'); v.appendChild(document.createTextNode(I18N.name(r.value))); el('span', 'chev', v, '›'); }
       }
       hover(row, Z.SETTINGS, i);
     }
@@ -1041,6 +1081,7 @@
     if (pick && code !== pickedLanguage()) {
       Prefs.set('language', code);
       I18N.set(Prefs.language());
+      direction();
       pickShelf();
       renderAll();
       Data.refresh();   // the picks' titles and genres come in the new language
@@ -1096,7 +1137,7 @@
     list.style.height = Math.min(cityRows(), 7) * 78 + 'px';
     textField(holder, Z.CITY, typed, tr("Type the city's name"), tr('City'));
     var search = el('div', 'row', holder, tr('Search'));
-    sym('chevron_right', el('span', 'value', search));
+    forward(el('span', 'value', search));
     hover(search, Z.CITY, 1);
     for (var i = 0; i < cityFound.length; i++) {
       var row = el('div', 'row', holder, cityFound[i].label);
@@ -1179,8 +1220,8 @@
 
   function keySteps() {
     return tr("The key brings the picks: what's trending on your streaming apps, with their photos on the screensaver.") + '\n'
-      + tr('Free, and it takes two minutes:') + '\n1. ' + tr('Create an account at themoviedb.org.')
-      + '\n2. ' + tr('Open Settings → API and request a developer key.');
+      + tr('Free, and it takes two minutes:') + '\n' + I18N.digits(1) + '. ' + tr('Create an account at themoviedb.org.')
+      + '\n' + I18N.digits(2) + '. ' + tr('Open Settings → API and request a developer key.');
   }
 
   function renderKey() {
@@ -1200,7 +1241,7 @@
     keyField.setAttribute('autocapitalize', 'none');
     keyField.setAttribute('autocorrect', 'off');
     var save = el('div', 'row', holder, tr('Save'));
-    sym('chevron_right', el('span', 'value', save));
+    forward(el('span', 'value', save));
     hover(save, Z.KEY, 1);
     if (Prefs.tmdbKeyOnTV()) hover(el('div', 'row', holder, tr('Remove the key')), Z.KEY, 2);
     if (keyStatus) setClass(el('div', 'hint', box, keyStatus), 'warn', keyWarn);
@@ -1334,7 +1375,9 @@
     updateFocus();
   }
 
-  // MARK: - Shelf editor: which apps, in what order
+  // MARK: - Shelf and inputs editors: which ones, in what order
+
+  var editKind = 'shelf';   // which editor the sheet shows: 'shelf' (apps) or 'inputs'
 
   var editingTop = false;
 
@@ -1348,33 +1391,52 @@
     })};
   }
 
-  function renderShelfEdit() {
-    var box = $('shelfedit').firstChild, e = editList();
+  /** The inputs editor's rows: the shown ones in their order, then the hidden ones as the TV lists them. */
+  function inputsEditList() {
+    var shown = orderedInputs(), hidden = Prefs.inputsHidden(), rows = shown.slice();
+    for (var i = 0; i < inputs.length; i++) if (hidden.indexOf(inputs[i].key) >= 0) rows.push(inputs[i]);
+    return {keys: shown.map(function (x) { return x.key; }), rows: rows};
+  }
+
+  function renderEdit() {
+    var forInputs = editKind === 'inputs';
+    var box = $('shelfedit').firstChild, e = forInputs ? inputsEditList() : editList();
     box.innerHTML = '';
     var title = el('div', 'title', box);
-    sym(editingTop ? 'settings' : 'apps', title);
-    title.appendChild(document.createTextNode(editingTop ? tr('Top Buttons') : tr('Shelf')));
+    sym(forInputs ? 'hdmi' : editingTop ? 'settings' : 'apps', title);
+    title.appendChild(document.createTextNode(forInputs ? tr('Inputs') : editingTop ? tr('Top Buttons') : tr('Shelf')));
     var list = el('div', 'list', box), holder = el('div', 'rows', list);
     list.style.height = Math.min(e.rows.length, 7) * 78 + 'px';
     for (var i = 0; i < e.rows.length; i++) {
-      var a = e.rows[i], at = e.ids.indexOf(a.id), row = el('div', 'row', holder, a.title);
+      var item = e.rows[i], at = (forInputs ? e.keys : e.ids).indexOf(forInputs ? item.key : item.id);
+      var row = el('div', 'row', holder, I18N.name(forInputs ? item.label || tr('Live TV') : item.title));
       var place = el('span', 'value', row, at >= 0 ? '#' + (at + 1) : tr('shelf|Off'));
-      if (at >= 0) sym('check', place).style.marginLeft = '16px';   // on the shelf: a check, as in the pickers
+      if (at >= 0) sym('check', place).style[rtl ? 'marginRight' : 'marginLeft'] = '16px';   // shown: a check, as in the pickers
       hover(row, Z.EDIT, i);
     }
-    el('div', 'hint', box, editingTop ? tr('OK adds or removes a button. ← → change the order.')
-        : tr('OK adds or removes an app. ← → change the order.'));
+    if (forInputs) el('div', 'hint', box, tr('OK shows or hides an input. ← → change the order.'));
+    else el('div', 'hint', box, editingTop ? tr('OK adds or removes a button. ← → change the order.') : tr('OK adds or removes an app. ← → change the order.'));
+    updateFocus();
+  }
+
+  function openEdit(kind) {
+    setClass($('settings'), 'open', false);
+    st.zone = Z.EDIT;
+    st.edit = 0;
+    editKind = kind;
+    renderEdit();
+    setClass($('shelfedit'), 'open', true);
     updateFocus();
   }
 
   function openShelfEdit(top) {
     editingTop = !!top;
-    setClass($('settings'), 'open', false);
-    st.zone = Z.EDIT;
-    st.edit = 0;
-    renderShelfEdit();
-    setClass($('shelfedit'), 'open', true);
-    updateFocus();
+    openEdit('shelf');
+  }
+
+  function openInputsEdit() {
+    editingTop = false;
+    openEdit('inputs');
   }
 
   function editShelf(dx) {
@@ -1400,7 +1462,42 @@
     }
     var again = editList();
     for (var i = 0; i < again.rows.length; i++) if (again.rows[i].id === app.id) st.edit = i;
-    renderShelfEdit();
+    renderEdit();
+  }
+
+  function editInputs(dx) {
+    var e = inputsEditList(), x = e.rows[st.edit];
+    if (!x) return;
+    // The first change writes today's setup down, the Live TV switch's choice with it. So does every later one, for
+    // an input the TV has started listing since: it's at the end, as the drawer shows it, and can then move or go.
+    var order = (Prefs.inputsOrder() || []).slice(), hidden = Prefs.inputsHidden().slice();
+    for (var k = 0; k < e.keys.length; k++) if (order.indexOf(e.keys[k]) < 0) order.push(e.keys[k]);
+    if (dx === 0) {
+      var at = order.indexOf(x.key);
+      if (at >= 0) { order.splice(at, 1); hidden.push(x.key); }
+      else {
+        order.push(x.key);
+        var h = hidden.indexOf(x.key);
+        if (h >= 0) hidden.splice(h, 1);
+      }
+    } else {
+      var at2 = e.keys.indexOf(x.key);
+      if (at2 < 0) return;   // hidden inputs don't move
+      var to = Math.max(0, Math.min(e.keys.length - 1, at2 + dx));
+      if (to === at2) return;
+      var at3 = order.indexOf(x.key);
+      if (at3 >= 0) order.splice(at3, 1);
+      var ni = order.indexOf(e.keys[to]);
+      // An input the order doesn't know yet joins at the end, as the drawer shows it.
+      if (ni < 0) order.push(x.key);
+      else order.splice(dx > 0 ? ni + 1 : ni, 0, x.key);
+    }
+    Prefs.set('inputsOrder', order);
+    Prefs.set('inputsHidden', hidden);
+    renderDrawer();
+    var again = inputsEditList();
+    for (var i = 0; i < again.rows.length; i++) if (again.rows[i].key === x.key) st.edit = i;
+    renderEdit();
   }
 
   // MARK: - Opening things
@@ -1422,11 +1519,30 @@
     return {app: app, params: via ? {contentTarget: 'nuvio://tmdb/' + (p.kind === 'tv' ? 'series' : 'movie') + '/' + p.id} : null};
   }
 
+  /**
+   * Opens a pick's target: in Nuvio as picked, else its app, on its title where this TV's app takes one and Watchmode
+   * knows it (watchmode_key; on Samsung, Prime Video: TV.takesTitle). LG opens the app as before.
+   */
+  function openTarget(p, target) {
+    if (!target) return;
+    if (target.params || !p || !TV.takesTitle(p.app)) { launcher(target.app.id, target.app.title, target.params)(); return; }
+    var mine = p.kind + ':' + p.id;
+    if (lookingUp === mine) return;   // OK again while Watchmode answers (up to 4 s): one lookup, one launch
+    lookingUp = mine;
+    Data.titleLink(p, function (link) {
+      if (lookingUp !== mine) return;   // something else was opened meanwhile: that one stays in front
+      launcher(target.app.id, target.app.title, link ? {link: link, service: p.app} : null)();
+    });
+  }
+
+  var lookingUp = '';   // the pick whose title Watchmode is being asked for, until something is opened
+
   function launcher(id, name, params) {
     return function () {
+      lookingUp = '';
       if (id === ALL_APPS_ID) { openApps(); return; }
       TV.launch(id, params || null, function (ok) {
-        if (!ok) toast(trf("Couldn't open {app}.", {app: name || id}));
+        if (!ok) toast(trf("Couldn't open {app}.", {app: I18N.name(name || id)}));
       });
     };
   }
@@ -1437,9 +1553,38 @@
     });
   }
 
-  function liveTV() {
-    for (var i = 0; i < inputs.length; i++) if (inputs[i].key === 'live') return inputs[i];
+  function inputByKey(key) {
+    for (var i = 0; i < inputs.length; i++) if (inputs[i].key === key) return inputs[i];
     return null;
+  }
+
+  function liveTV() {
+    return inputByKey('live');
+  }
+
+  /** The drawer's inputs: the person's order (Home Settings > Inputs), one the order doesn't know yet at the end,
+   *  the hidden ones out. An input the TV no longer lists keeps its place in the saved order and is skipped here. */
+  function orderedInputs() {
+    var order = Prefs.inputsOrder(), hidden = Prefs.inputsHidden(), out = [], placed = {}, i, x;
+    if (order) {
+      for (i = 0; i < order.length; i++) {
+        x = inputByKey(order[i]);
+        if (x && !placed[x.key] && hidden.indexOf(x.key) < 0) { out.push(x); placed[x.key] = true; }
+      }
+    }
+    for (i = 0; i < inputs.length; i++) {
+      x = inputs[i];
+      if (!placed[x.key] && hidden.indexOf(x.key) < 0) { out.push(x); placed[x.key] = true; }
+    }
+    return out;
+  }
+
+  /** Where the HDMI Inputs button lands in the drawer: the first HDMI port shown, wherever Home Settings > Inputs put
+   *  it; with none shown, the drawer's first tile. */
+  function firstPort() {
+    var shown = orderedInputs();
+    for (var i = 0; i < shown.length; i++) if (shown[i].key !== 'live') return i;
+    return 0;
   }
 
   /** The input the first top button opens, picked in Home Settings > Live TV button: Live TV or an HDMI port. */
@@ -1462,13 +1607,12 @@
         var button = topButtons[st.top - 3];
         if (!button) return;
         if (button.id === 'live') { var box2 = boxTV(); if (box2) launcher(box2.id, boxLabel())(); }
-        else if (button.id === 'inputs') { st.zone = Z.SHELF; openDrawer(); st.drawer = 1 < drawerInputs ? 1 : 0; updateFocus(); }
+        else if (button.id === 'inputs') { st.zone = Z.SHELF; openDrawer(); st.drawer = firstPort(); updateFocus(); }
         else if (button.id === 'tv-settings') tvSettings();
         else openSettings();
         return;
       case Z.CARDS:
-        var target = pickTarget(cards[st.card]);
-        if (target) launcher(target.app.id, target.app.title, target.params)();
+        openTarget(cards[st.card], pickTarget(cards[st.card]));
         return;
       case Z.SHELF:
         if (shelf[st.shelf]) launcher(shelf[st.shelf].id, shelf[st.shelf].title)();
@@ -1483,7 +1627,8 @@
         if (rowsNow[st.row]) { rowsNow[st.row].step(1); if (st.zone === Z.SETTINGS) renderSettings(); }
         return;
       case Z.EDIT:
-        editShelf(0);
+        if (editKind === 'inputs') editInputs(0);
+        else editShelf(0);
         return;
       case Z.LANG:
         closeLanguages(true);
@@ -1515,6 +1660,9 @@
 
   function move(dx, dy) {
     var tiles = $('tiles').children, cardNodes = $('cards').children;
+    // Mirrored, the screen's left is the way forward: ← goes to the next one, and in the shelf's and the inputs' editors
+    // to a later place (the rows they order run from the right). Settings' values keep their arrows.
+    if (rtl && (st.zone === Z.SHELF || st.zone === Z.CARDS || st.zone === Z.TOP || st.zone === Z.DRAWER || st.zone === Z.APPS || st.zone === Z.EDIT)) dx = -dx;
     switch (st.zone) {
       case Z.SHELF:
         if (dx) st.shelf = Math.max(0, Math.min(shelf.length - 1, st.shelf + dx));
@@ -1550,12 +1698,14 @@
         if (dy) st.row = Math.max(0, Math.min(rowsNow.length - 1, st.row + dy));
         else if (dx && rowsNow[st.row]) {
           var r = rowsNow[st.row];
-          if (r.value !== '›') { r.step(dx); if (st.zone === Z.SETTINGS) renderSettings(); }
+          // A row that opens a list opens toward its chevron, which points left when mirrored.
+          if (r.value !== '›') { r.step(rtl && r.opens ? -dx : dx); if (st.zone === Z.SETTINGS) renderSettings(); }
         }
         break;
       case Z.EDIT:
-        if (dy) st.edit = Math.max(0, Math.min(editList().rows.length - 1, st.edit + dy));
-        else if (dx) editShelf(dx);
+        var editRows = editKind === 'inputs' ? inputsEditList().rows : editList().rows;
+        if (dy) st.edit = Math.max(0, Math.min(editRows.length - 1, st.edit + dy));
+        else if (dx) { if (editKind === 'inputs') editInputs(dx); else editShelf(dx); }
         break;
       case Z.LANG:
         if (dy) st.lang = Math.max(0, Math.min(languageChoices().length - 1, st.lang + dy));
@@ -1574,7 +1724,8 @@
     if (st.zone === Z.EDIT) {
       setClass($('shelfedit'), 'open', false);
       openSettings();
-      for (var i = 0; i < rowsNow.length; i++) if (editingTop ? rowsNow[i].top : rowsNow[i].shelf) st.row = i;
+      // Back lands on the row that opened the editor.
+      for (var i = 0; i < rowsNow.length; i++) if (editKind === 'inputs' ? rowsNow[i].inputs : editingTop ? rowsNow[i].top : rowsNow[i].shelf) st.row = i;
       updateFocus();
       return;
     }
@@ -1686,11 +1837,11 @@
       if (p) {
         back.style.backgroundImage = 'url(' + Data.image(p.backdrop, 'original') + ')';
         back.style.webkitTransform = back.style.transform = 'scale(1.0)';
-        clock.children[2].textContent = p.title;
+        clock.children[2].textContent = I18N.name(p.title);
         saverPick = p;
         // With Watch from the screensaver on, OK opens this title's app (any other key only closes).
         var target = Prefs.saverWatch() ? pickTarget(p) : null;
-        hint.textContent = target ? trf('Press OK to watch on {app} · any other button to close', {app: target.app.title}) : '';
+        hint.textContent = target ? trf('Press OK to watch on {app} · any other button to close', {app: I18N.name(target.app.title)}) : '';
         setTimeout(function () {
           setClass(back, 'on', true);
           setClass(front, 'on', false);
@@ -1761,9 +1912,9 @@
     idleAt = Date.now();
     if (ambientOn) { hideAmbient(); return true; }
     if (!saverOn) return false;
-    var target = ok && Prefs.saverWatch() ? pickTarget(saverPick) : null;
+    var target = ok && Prefs.saverWatch() ? pickTarget(saverPick) : null, watched = saverPick;
     hideSaver();
-    if (target) launcher(target.app.id, target.app.title, target.params)();
+    openTarget(watched, target);
     return true;
   }
 
@@ -1821,6 +1972,7 @@
   }
 
   function loadApps(done) {
+    TV.returnHome(Prefs.homeReturns());
     TV.apps(function (list) {
       apps = list.filter(function (a) { return !hidden(a); });
       Data.setApps(apps);
@@ -1860,6 +2012,12 @@
     updateFocus();
   }
 
+  /**
+   * Samsung, behind another app: a build with samsung_home_button keeps the page running there (the others are paused
+   * by the TV), and nothing is fetched or drawn for a screen nobody sees; coming back catches up (visibilitychange).
+   */
+  function resting() { return TV.name === 'tizen' && document.hidden; }
+
   function reopened() {
     // LG: with handlesRelaunch the app has to come to the front itself, or opening it again while it runs shows nothing.
     if (window.PalmSystem && window.PalmSystem.activate) window.PalmSystem.activate();
@@ -1877,10 +2035,13 @@
     hideAmbient();
     if (document.hidden) return;
     idleAt = Date.now();
+    TV.noteChannel();   // back from the viewer: the antenna channel it played, for Live TV
+    if (TV.name === 'tizen') { renderClock(); checkNight(); applyDim(); }   // what resting() left as it was
     loadApps(function () { renderShelf(); renderDrawer(); updateFocus(); Data.refresh(); });
   });
 
   I18N.set(Prefs.language());
+  direction();
   I18N.setClock(Prefs.clockFormat());
   checkNight();   // now, from the last forecast: not after the TV lists its apps, with the day look until then
   // LG's screensaver waits only when ours will show: not under a sheet (ours waits there), and not without photos.
@@ -1895,6 +2056,7 @@
     Data.refresh();
   });
   setInterval(function () {
+    if (resting()) return;
     checkNight();
     Data.refresh();
     applyDim();   // automatic: medium from 22:00, off again at 07:00
